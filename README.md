@@ -1,10 +1,6 @@
 ![Website Deploy](https://deploy-badge.vercel.app/?url=http://www.nextjs.org/&name=api-response-comparator)
 [![Tests Status](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml)
-![Last Commit](https://shields.io)
-![Open Issues](https://shields.io)
-![Repo Size](https://shields.io)
-![Top Language](https://shields.io)
-![License](https://shields.io)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/arnabnandy7/api-response-comparator/blob/main/LICENSE)
 
 # API Response Comparator
 
