@@ -1,6 +1,6 @@
 ![Website Deploy](https://deploy-badge.vercel.app/?url=http://www.nextjs.org/&name=api-response-comparator)
 [![Tests Status](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/arnabnandy7/api-response-comparator/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/arnabnandy7/api-response-comparator/blob/main/LICENSE)
 
 # API Response Comparator
 
