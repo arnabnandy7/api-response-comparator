@@ -1,3 +1,5 @@
+![Website Deploy](https://deploy-badge.vercel.app/?url=http://www.nextjs.org/&name=api-response-comparator)
+
 # API Response Comparator
 
 A Next.js app for comparing two JSON API responses. Paste `JSON A` and `JSON B`, run the comparison, and review the differences in a table.
