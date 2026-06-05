@@ -1,0 +1,38 @@
+# .github/workflows/stale-branches.yml
+
+name: Remove Stale Branches
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  stale_branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove Stale Branches
+        uses: crs-k/stale-branches@v9.0.0
+        with:
+          repo-token: '${{ secrets.GITHUB_TOKEN }}'
+          days-before-stale: 120
+          days-before-delete: 180
+          comment-updates: false
+          max-issues: 20
+          tag-committer: false
+          stale-branch-label: 'stale branch 🗑️'
+          compare-branches: 'info'
+          branches-filter-regex: '^((?!dependabot))'
+          rate-limit: false
+          pr-check: true
+          dry-run: true
+          ignore-issue-interaction: false
+          include-protected-branches: false
+          include-ruleset-branches: false
+          ignore-commit-messages: ''
+          ignore-committers: ''
+          ignore-default-branch-commits: false
