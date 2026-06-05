@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# API Response Comparator
+
+A Next.js app for comparing two JSON API responses. Paste `JSON A` and `JSON B`, run the comparison, and review the differences in a table.
+
+The comparison flow is:
+
+```text
+Parse JSON
+-> Flatten nested paths
+-> Compare flattened values
+-> Display DiffEntry[] in the UI
+```
+
+## Features
+
+- Paste two JSON responses side by side
+- Detect added, removed, and changed values
+- Flatten nested objects and arrays into readable paths
+- Display differences in a table with old and new values
+- Show parse errors for invalid JSON
+- Unit and UI tests with Vitest and Testing Library
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- Vitest
+- React Testing Library
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev
+```
 
-## Learn More
+Runs the app locally with Next.js.
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Creates a production build and runs TypeScript checks.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run start
+```
 
-## Deploy on Vercel
+Starts the production server after a successful build.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run lint
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Runs ESLint.
+
+```bash
+npm test
+```
+
+Runs the Vitest test suite.
+
+## Project Structure
+
+```text
+src/
+  app/
+    page.tsx       Main comparator UI
+    layout.tsx     Root layout and metadata
+    globals.css    Global styles
+  lib/
+    flatten.ts     Converts JSON into path-value pairs
+    compare.ts     Produces DiffEntry[] from two JSON values
+  types/
+    diff.ts        DiffEntry type definition
+
+test/
+  app/             UI tests
+  lib/             compare and flatten tests
+  types/           type contract tests
+```
+
+## Diff Format
+
+The comparator returns an array of `DiffEntry` objects:
+
+```ts
+export interface DiffEntry {
+  path: string;
+  type: 'ADDED' | 'REMOVED' | 'CHANGED';
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+```
+
+Examples:
+
+- `ADDED`: path exists in `JSON B` but not in `JSON A`
+- `REMOVED`: path exists in `JSON A` but not in `JSON B`
+- `CHANGED`: path exists in both, but the values differ
+
+## FAQ
+
+### What counts as JSON A and JSON B?
+
+`JSON A` is treated as the original response. `JSON B` is treated as the new response.
+
+### How are nested values compared?
+
+Nested objects are flattened into dot paths, and arrays use bracket paths. For example:
+
+```json
+{
+  "user": {
+    "roles": ["admin"]
+  }
+}
+```
+
+becomes:
+
+```text
+user.roles[0] = "admin"
+```
+
+### Why do I see `ADDED` or `REMOVED` for array items?
+
+Arrays are compared by index. If `JSON B` has an extra item at `roles[1]`, that path is reported as `ADDED`.
+
+### Does this ignore key order?
+
+Yes for object structure, because values are compared by flattened paths. The current implementation compares leaf values with `JSON.stringify`, which is fine for JSON values coming from `JSON.parse`.
+
+### What happens with invalid JSON?
+
+The UI catches parse errors and displays the parser message instead of running the comparison.
+
+### Why is there a PostCSS override?
+
+`package.json` includes a `postcss` override so npm resolves a patched PostCSS version while using the current Next.js release.
+
+## Contributing
+
+See [contributor.md](./contributor.md) for local workflow, testing expectations, and project conventions.
