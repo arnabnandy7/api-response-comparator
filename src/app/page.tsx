@@ -15,19 +15,23 @@ export default function Home() {
     setError('');
     setHasCompared(true);
 
-    try {
-      const parsedJsonA = JSON.parse(jsonA);
-      const parsedJsonB = JSON.parse(jsonB);
+    const parsedJsonA = parseJson(jsonA);
 
-      setDiffs(compareJson(parsedJsonA, parsedJsonB));
-    } catch (unknownError) {
+    if (!parsedJsonA.ok) {
       setDiffs([]);
-      setError(
-        unknownError instanceof Error
-          ? unknownError.message
-          : 'Unable to parse JSON.',
-      );
+      setError('Invalid JSON in Response A');
+      return;
     }
+
+    const parsedJsonB = parseJson(jsonB);
+
+    if (!parsedJsonB.ok) {
+      setDiffs([]);
+      setError('Invalid JSON in Response B');
+      return;
+    }
+
+    setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value));
   };
 
   return (
@@ -185,6 +189,19 @@ function formatValue(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+function parseJson(input: string):
+  | { ok: true; value: unknown }
+  | { ok: false } {
+  try {
+    return {
+      ok: true,
+      value: JSON.parse(input),
+    };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function getTypeClassName(type: DiffEntry['type']): string {

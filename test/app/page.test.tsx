@@ -50,7 +50,7 @@ describe('Home', () => {
     expect(within(table).getByText('31')).toBeInTheDocument();
   });
 
-  it('shows a parse error for invalid JSON', async () => {
+  it('shows a response A validation error for invalid JSON', async () => {
     const user = userEvent.setup();
 
     render(<Home />);
@@ -61,6 +61,20 @@ describe('Home', () => {
     await user.paste('{"ok":true}');
     await user.click(screen.getByRole('button', { name: 'Compare' }));
 
-    expect(screen.getByText(/expected property name/i)).toBeInTheDocument();
+    expect(screen.getByText('Invalid JSON in Response A')).toBeInTheDocument();
+  });
+
+  it('shows a response B validation error for invalid JSON', async () => {
+    const user = userEvent.setup();
+
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste('{"ok":true}');
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste('{bad json');
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+
+    expect(screen.getByText('Invalid JSON in Response B')).toBeInTheDocument();
   });
 });
