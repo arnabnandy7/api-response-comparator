@@ -118,14 +118,7 @@ export async function GET(request: Request) {
   }
 
   const normalizedHost = target.hostname.toLowerCase();
-  if (ALLOWED_PROXY_HOSTS.size === 0) {
-    return NextResponse.json(
-      { error: 'Proxy host allowlist is not configured' },
-      { status: 500 },
-    );
-  }
-
-  if (!ALLOWED_PROXY_HOSTS.has(normalizedHost)) {
+  if (ALLOWED_PROXY_HOSTS.size > 0 && !ALLOWED_PROXY_HOSTS.has(normalizedHost)) {
     return NextResponse.json(
       { error: 'Target host is not allowed' },
       { status: 400 },
