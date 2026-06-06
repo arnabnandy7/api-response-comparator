@@ -13,14 +13,16 @@ describe('generateIgnoreSuggestions', () => {
         {
           path: 'user.updatedAt',
           type: 'CHANGED',
-          oldValue: '2026-06-06T10:00:00Z',
-          newValue: '2026-06-06T10:01:00Z',
+          devValue: '2026-06-06T10:00:00Z',
+          qaValue: '2026-06-06T10:01:00Z',
+          prodValue: '2026-06-06T10:02:00Z',
         },
         {
           path: 'payment.requestId',
           type: 'CHANGED',
-          oldValue: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-          newValue: '9b2de3a0-42f5-4c6f-9227-701f2a662c52',
+          devValue: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          qaValue: '9b2de3a0-42f5-4c6f-9227-701f2a662c52',
+          prodValue: '6ba7b810-9dad-41d1-80b4-00c04fd430c8',
         },
       ]),
     ).toEqual([
@@ -45,8 +47,9 @@ describe('generateIgnoreSuggestions', () => {
         {
           path: 'metadata.marker',
           type: 'CHANGED',
-          oldValue: '2026-06-06T10:00:00Z',
-          newValue: '2026-06-06T10:05:00Z',
+          devValue: '2026-06-06T10:00:00Z',
+          qaValue: '2026-06-06T10:05:00Z',
+          prodValue: '2026-06-06T10:10:00Z',
         },
       ]),
     ).toEqual([
@@ -63,8 +66,9 @@ describe('generateIgnoreSuggestions', () => {
     const diffs = Array.from({ length: 3 }, (_, index) => ({
       path: `orders[${index}].trackingId`,
       type: 'CHANGED' as const,
-      oldValue: `oldtrackingtokenvalue${index}`,
-      newValue: `newtrackingtokenvalue${index}`,
+      devValue: `oldtrackingtokenvalue${index}`,
+      qaValue: `newtrackingtokenvalue${index}`,
+      prodValue: `prodtrackingtokenvalue${index}`,
     }));
 
     expect(generateIgnoreSuggestions(diffs)).toEqual([
@@ -82,8 +86,9 @@ describe('generateIgnoreSuggestions', () => {
     const diffs = Array.from({ length: 10 }, (_, index) => ({
       path: `events[${index}].operationId`,
       type: 'CHANGED' as const,
-      oldValue: `oldoperationtokenvalue${index}`,
-      newValue: `newoperationtokenvalue${index}`,
+      devValue: `oldoperationtokenvalue${index}`,
+      qaValue: `newoperationtokenvalue${index}`,
+      prodValue: `prodoperationtokenvalue${index}`,
     }));
 
     expect(generateIgnoreSuggestions(diffs)[0]).toMatchObject({
@@ -99,8 +104,9 @@ describe('generateIgnoreSuggestions', () => {
         {
           path: 'response.timestamp',
           type: 'CHANGED',
-          oldValue: 1780760774,
-          newValue: 1780760834000,
+          devValue: 1780760774,
+          qaValue: 1780760834000,
+          prodValue: 1780760894000,
         },
       ]),
     ).toEqual([
@@ -154,7 +160,7 @@ describe('generateIgnoreSuggestions', () => {
     };
 
     expect(
-      generateIgnoreSuggestions(compareJson(responseA, responseB)).map(
+      generateIgnoreSuggestions(compareJson(responseA, responseB, responseB)).map(
         ({ path, confidence }) => ({ path, confidence }),
       ),
     ).toEqual([
@@ -174,12 +180,12 @@ describe('generateIgnoreSuggestions', () => {
         {
           path: 'metadata.createdAt',
           type: 'ADDED',
-          newValue: '2026-06-06T10:00:00Z',
+          qaValue: '2026-06-06T10:00:00Z',
         },
         {
           path: 'metadata.traceId',
           type: 'REMOVED',
-          oldValue: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          devValue: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
         },
       ]),
     ).toEqual([]);
@@ -188,8 +194,20 @@ describe('generateIgnoreSuggestions', () => {
   it('does not suggest ordinary changed business fields below the threshold', () => {
     expect(
       generateIgnoreSuggestions([
-        { path: 'user.id', type: 'CHANGED', oldValue: 1, newValue: 2 },
-        { path: 'user.format', type: 'CHANGED', oldValue: 'json', newValue: 'xml' },
+        {
+          path: 'user.id',
+          type: 'CHANGED',
+          devValue: 1,
+          qaValue: 2,
+          prodValue: 3,
+        },
+        {
+          path: 'user.format',
+          type: 'CHANGED',
+          devValue: 'json',
+          qaValue: 'xml',
+          prodValue: 'yaml',
+        },
       ]),
     ).toEqual([]);
   });

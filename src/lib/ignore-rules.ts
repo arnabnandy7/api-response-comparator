@@ -50,7 +50,11 @@ export function generateIgnoreSuggestions(diffs: DiffEntry[]): IgnoreSuggestion[
     score += nameResult.score;
     if (nameResult.reason) reasons.push(nameResult.reason);
 
-    const valueResult = scoreValues(diff.oldValue, diff.newValue);
+    const valueResult = scoreValues([
+      diff.devValue,
+      diff.qaValue,
+      diff.prodValue,
+    ]);
     score += valueResult.score;
     if (valueResult.reason) reasons.push(valueResult.reason);
 
@@ -133,8 +137,8 @@ function scoreFieldName(path: string): { score: number; reason?: string } {
   return { score: 0 };
 }
 
-function scoreValues(oldValue: unknown, newValue: unknown): { score: number; reason?: string } {
-  const results = [oldValue, newValue].map(scoreValue);
+function scoreValues(values: unknown[]): { score: number; reason?: string } {
+  const results = values.map(scoreValue);
   return results.sort((left, right) => right.score - left.score)[0];
 }
 

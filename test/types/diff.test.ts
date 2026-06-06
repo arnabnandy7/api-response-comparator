@@ -6,8 +6,9 @@ describe('DiffEntry', () => {
     expectTypeOf<DiffEntry>().toEqualTypeOf<{
       path: string;
       type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'TYPE_CHANGE';
-      oldValue?: unknown;
-      newValue?: unknown;
+      devValue?: unknown;
+      qaValue?: unknown;
+      prodValue?: unknown;
     }>();
   });
 });

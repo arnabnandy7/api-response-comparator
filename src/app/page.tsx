@@ -14,16 +14,19 @@ type DiffFilter = 'ALL' | DiffEntry['type'];
 type ResultView = 'TABLE' | 'TREE';
 
 export default function Home() {
-  const [jsonA, setJsonA] = useState('');
-  const [jsonB, setJsonB] = useState('');
-  const [urlA, setUrlA] = useState('');
-  const [urlB, setUrlB] = useState('');
+  const [devJson, setDevJson] = useState('');
+  const [qaJson, setQaJson] = useState('');
+  const [prodJson, setProdJson] = useState('');
+  const [devUrl, setDevUrl] = useState('');
+  const [qaUrl, setQaUrl] = useState('');
+  const [prodUrl, setProdUrl] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('ALL');
   const [pathSearch, setPathSearch] = useState('');
   const [resultView, setResultView] = useState<ResultView>('TABLE');
-  const [comparedJsonA, setComparedJsonA] = useState<unknown>();
-  const [comparedJsonB, setComparedJsonB] = useState<unknown>();
+  const [comparedDevJson, setComparedDevJson] = useState<unknown>();
+  const [comparedQaJson, setComparedQaJson] = useState<unknown>();
+  const [comparedProdJson, setComparedProdJson] = useState<unknown>();
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -31,6 +34,12 @@ export default function Home() {
   const [ignoreFields, setIgnoreFields] = useState('');
   const [ignoreSuggestions, setIgnoreSuggestions] = useState<IgnoreSuggestion[]>([]);
   const [toastMessage, setToastMessage] = useState('');
+  const populatedJsonCount = [devJson, qaJson, prodJson].filter((value) =>
+    value.trim(),
+  ).length;
+  const populatedUrlCount = [devUrl, qaUrl, prodUrl].filter((value) =>
+    value.trim(),
+  ).length;
 
   const resetIgnoreRules = () => {
     setIgnoreFields('');
@@ -43,8 +52,9 @@ export default function Home() {
     setDiffFilter('ALL');
     setPathSearch('');
     setResultView('TABLE');
-    setComparedJsonA(undefined);
-    setComparedJsonB(undefined);
+    setComparedDevJson(undefined);
+    setComparedQaJson(undefined);
+    setComparedProdJson(undefined);
     setError('');
     setHasCompared(false);
   };
@@ -140,12 +150,13 @@ export default function Home() {
   const handleDownloadExcel = () => {
     return downloadExcel(
       [
-        ['Path', 'Type', 'JSON A', 'JSON B'],
+        ['Path', 'Type', 'Dev', 'QA', 'Prod'],
         ...diffs.map((diff) => [
           diff.path || '(root)',
           diff.type,
-          formatValue(diff.oldValue),
-          formatValue(diff.newValue),
+          formatValue(diff.devValue),
+          formatValue(diff.qaValue),
+          formatValue(diff.prodValue),
         ]),
       ],
       'Diff',
@@ -160,19 +171,27 @@ export default function Home() {
     setPathSearch('');
     setResultView('TABLE');
 
-    const parsedJsonA = parseJson(jsonA);
+    const parsedDev = parseOptionalJson(devJson);
 
-    if (!parsedJsonA.ok) {
+    if (!parsedDev.ok) {
       setDiffs([]);
-      setError('Invalid JSON in Response A');
+      setError('Invalid JSON in Dev response');
       return;
     }
 
-    const parsedJsonB = parseJson(jsonB);
+    const parsedQa = parseOptionalJson(qaJson);
 
-    if (!parsedJsonB.ok) {
+    if (!parsedQa.ok) {
       setDiffs([]);
-      setError('Invalid JSON in Response B');
+      setError('Invalid JSON in QA response');
+      return;
+    }
+
+    const parsedProd = parseOptionalJson(prodJson);
+
+    if (!parsedProd.ok) {
+      setDiffs([]);
+      setError('Invalid JSON in Prod response');
       return;
     }
 
@@ -181,37 +200,63 @@ export default function Home() {
       .map((key) => key.trim())
       .filter(Boolean);
 
-    setComparedJsonA(parsedJsonA.value);
-    setComparedJsonB(parsedJsonB.value);
-    setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value, ignoreKeys));
+    setComparedDevJson(parsedDev.active ? parsedDev.value : undefined);
+    setComparedQaJson(parsedQa.active ? parsedQa.value : undefined);
+    setComparedProdJson(parsedProd.active ? parsedProd.value : undefined);
+    setDiffs(
+      compareJson(
+        parsedDev.value,
+        parsedQa.value,
+        parsedProd.value,
+        ignoreKeys,
+        {
+          dev: parsedDev.active,
+          qa: parsedQa.active,
+          prod: parsedProd.active,
+        },
+      ),
+    );
   };
 
   const handleFormatBoth = () => {
     let hasError = false;
     let newError = '';
 
-    if (jsonA.trim()) {
+    if (devJson.trim()) {
       try {
-        const formattedJsonA = JSON.stringify(JSON.parse(jsonA), null, 2);
-        if (formattedJsonA !== jsonA) {
+        const formattedDevJson = JSON.stringify(JSON.parse(devJson), null, 2);
+        if (formattedDevJson !== devJson) {
           resetSourceDerivedState();
-          setJsonA(formattedJsonA);
+          setDevJson(formattedDevJson);
         }
       } catch {
-        newError += 'Invalid JSON in Response A. ';
+        newError += 'Invalid JSON in Dev response. ';
         hasError = true;
       }
     }
 
-    if (jsonB.trim()) {
+    if (qaJson.trim()) {
       try {
-        const formattedJsonB = JSON.stringify(JSON.parse(jsonB), null, 2);
-        if (formattedJsonB !== jsonB) {
+        const formattedQaJson = JSON.stringify(JSON.parse(qaJson), null, 2);
+        if (formattedQaJson !== qaJson) {
           resetSourceDerivedState();
-          setJsonB(formattedJsonB);
+          setQaJson(formattedQaJson);
         }
       } catch {
-        newError += 'Invalid JSON in Response B.';
+        newError += 'Invalid JSON in QA response. ';
+        hasError = true;
+      }
+    }
+
+    if (prodJson.trim()) {
+      try {
+        const formattedProdJson = JSON.stringify(JSON.parse(prodJson), null, 2);
+        if (formattedProdJson !== prodJson) {
+          resetSourceDerivedState();
+          setProdJson(formattedProdJson);
+        }
+      } catch {
+        newError += 'Invalid JSON in Prod response.';
         hasError = true;
       }
     }
@@ -226,22 +271,33 @@ export default function Home() {
   const handleGenerateIgnoreRules = () => {
     setError('');
 
-    const parsedJsonA = parseJson(jsonA);
-    if (!parsedJsonA.ok) {
+    const parsedDev = parseOptionalJson(devJson);
+    if (!parsedDev.ok) {
       setIgnoreSuggestions([]);
-      setError('Invalid JSON in Response A');
+      setError('Invalid JSON in Dev response');
       return;
     }
 
-    const parsedJsonB = parseJson(jsonB);
-    if (!parsedJsonB.ok) {
+    const parsedQa = parseOptionalJson(qaJson);
+    if (!parsedQa.ok) {
       setIgnoreSuggestions([]);
-      setError('Invalid JSON in Response B');
+      setError('Invalid JSON in QA response');
+      return;
+    }
+
+    const parsedProd = parseOptionalJson(prodJson);
+    if (!parsedProd.ok) {
+      setIgnoreSuggestions([]);
+      setError('Invalid JSON in Prod response');
       return;
     }
 
     const suggestions = generateIgnoreSuggestions(
-      compareJson(parsedJsonA.value, parsedJsonB.value),
+      compareJson(parsedDev.value, parsedQa.value, parsedProd.value, [], {
+        dev: parsedDev.active,
+        qa: parsedQa.active,
+        prod: parsedProd.active,
+      }),
     );
     setIgnoreSuggestions(suggestions);
 
@@ -279,6 +335,23 @@ export default function Home() {
     return response.text();
   };
 
+  const fetchAndParseOptionalUrl = async (
+    url: string,
+    environment: 'Dev' | 'QA' | 'Prod',
+  ): Promise<OptionalJsonSuccess> => {
+    if (!url.trim()) {
+      return { ok: true, active: false, value: undefined };
+    }
+
+    const text = await fetchWithProxy(url);
+
+    try {
+      return { ok: true, active: true, value: JSON.parse(text) };
+    } catch {
+      throw new Error(`${environment} response is not valid JSON`);
+    }
+  };
+
   const handleFetchAndCompare = async () => {
     setError('');
     setIsFetching(true);
@@ -288,31 +361,26 @@ export default function Home() {
     setResultView('TABLE');
 
     try {
-      const [textA, textB] = await Promise.all([
-        fetchWithProxy(urlA),
-        fetchWithProxy(urlB),
+      const [parsedDev, parsedQa, parsedProd] = await Promise.all([
+        fetchAndParseOptionalUrl(devUrl, 'Dev'),
+        fetchAndParseOptionalUrl(qaUrl, 'QA'),
+        fetchAndParseOptionalUrl(prodUrl, 'Prod'),
       ]);
 
-      let parsedA: unknown;
-      let parsedB: unknown;
-
-      try {
-        parsedA = JSON.parse(textA);
-      } catch {
-        throw new Error('Response A is not valid JSON');
-      }
-      try {
-        parsedB = JSON.parse(textB);
-      } catch {
-        throw new Error('Response B is not valid JSON');
-      }
-
-      setJsonA(JSON.stringify(parsedA, null, 2));
-      setJsonB(JSON.stringify(parsedB, null, 2));
-      setComparedJsonA(parsedA);
-      setComparedJsonB(parsedB);
+      setDevJson(parsedDev.active ? JSON.stringify(parsedDev.value, null, 2) : '');
+      setQaJson(parsedQa.active ? JSON.stringify(parsedQa.value, null, 2) : '');
+      setProdJson(parsedProd.active ? JSON.stringify(parsedProd.value, null, 2) : '');
+      setComparedDevJson(parsedDev.active ? parsedDev.value : undefined);
+      setComparedQaJson(parsedQa.active ? parsedQa.value : undefined);
+      setComparedProdJson(parsedProd.active ? parsedProd.value : undefined);
       resetIgnoreRules();
-      setDiffs(compareJson(parsedA, parsedB));
+      setDiffs(
+        compareJson(parsedDev.value, parsedQa.value, parsedProd.value, [], {
+          dev: parsedDev.active,
+          qa: parsedQa.active,
+          prod: parsedProd.active,
+        }),
+      );
       showToast('Fetched and compared responses');
     } catch (err: unknown) {
       console.error(err);
@@ -325,7 +393,7 @@ export default function Home() {
     }
   };
 
-  const handleJsonAFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleDevFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -333,15 +401,15 @@ export default function Home() {
       const fileText = await file.text();
       JSON.parse(fileText);
       resetSourceDerivedState();
-      setJsonA(fileText);
+      setDevJson(fileText);
       setError('');
       showToast(`Loaded ${file.name}`);
     } catch {
-      setError('Invalid JSON in uploaded Response A');
+      setError('Invalid JSON in uploaded Dev response');
     }
   };
 
-  const handleJsonBFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleQaFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -349,11 +417,27 @@ export default function Home() {
       const fileText = await file.text();
       JSON.parse(fileText);
       resetSourceDerivedState();
-      setJsonB(fileText);
+      setQaJson(fileText);
       setError('');
       showToast(`Loaded ${file.name}`);
     } catch {
-      setError('Invalid JSON in uploaded Response B');
+      setError('Invalid JSON in uploaded QA response');
+    }
+  };
+
+  const handleProdFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileText = await file.text();
+      JSON.parse(fileText);
+      resetSourceDerivedState();
+      setProdJson(fileText);
+      setError('');
+      showToast(`Loaded ${file.name}`);
+    } catch {
+      setError('Invalid JSON in uploaded Prod response');
     }
   };
 
@@ -362,14 +446,19 @@ export default function Home() {
     window.setTimeout(() => setToastMessage(''), 2500);
   };
 
-  const clearJsonA = () => {
+  const clearDevJson = () => {
     resetSourceDerivedState();
-    setJsonA('');
+    setDevJson('');
   };
 
-  const clearJsonB = () => {
+  const clearQaJson = () => {
     resetSourceDerivedState();
-    setJsonB('');
+    setQaJson('');
+  };
+
+  const clearProdJson = () => {
+    resetSourceDerivedState();
+    setProdJson('');
   };
 
   return (
@@ -398,117 +487,41 @@ export default function Home() {
           </div>
         )}
         {/* Input Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* JSON A */}
-          <div className="flex flex-col">
-            <div className="flex items-center justify-between gap-4 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-slate-200">
-                  📄
-                </span>
-                <label
-                  htmlFor="json-a"
-                  className="text-lg font-semibold text-gray-900 dark:text-white"
-                >
-                  JSON A
-                </label>
-              </div>
-
-              <label
-                htmlFor="json-a-file"
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-700"
-              >
-                <span>Upload JSON A</span>
-                <span aria-hidden="true">📁</span>
-              </label>
-
-              <input
-                id="json-a-file"
-                type="file"
-                accept=".json,application/json"
-                aria-label="Upload JSON A"
-                onChange={handleJsonAFileChange}
-                className="sr-only"
-              />
-            </div>
-
-            <div className="relative">
-              <textarea
-                id="json-a"
-                value={jsonA}
-                onChange={(e) => {
-                  resetSourceDerivedState();
-                  setJsonA(e.target.value);
-                }}
-                placeholder="Paste JSON response here..."
-                className="min-h-80 w-full flex-1 p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-sm"
-              />
-              <button
-                type="button"
-                onClick={clearJsonA}
-                aria-label="Clear JSON A"
-                className="absolute right-3 top-3 rounded bg-white/90 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-zinc-900/90 dark:text-slate-200 dark:hover:bg-zinc-700"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {/* JSON B */}
-          <div className="flex flex-col">
-            <div className="flex items-center justify-between gap-4 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-slate-200">
-                  📄
-                </span>
-                <label
-                  htmlFor="json-b"
-                  className="text-lg font-semibold text-gray-900 dark:text-white"
-                >
-                  JSON B
-                </label>
-              </div>
-
-              <label
-                htmlFor="json-b-file"
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-700"
-              >
-                <span>Upload JSON B</span>
-                <span aria-hidden="true">📁</span>
-              </label>
-
-              <input
-                id="json-b-file"
-                type="file"
-                accept=".json,application/json"
-                aria-label="Upload JSON B"
-                onChange={handleJsonBFileChange}
-                className="sr-only"
-              />
-            </div>
-
-            <div className="relative">
-              <textarea
-                id="json-b"
-                value={jsonB}
-                onChange={(e) => {
-                  resetSourceDerivedState();
-                  setJsonB(e.target.value);
-                }}
-                placeholder="Paste JSON response here..."
-                className="min-h-80 w-full flex-1 p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-sm"
-              />
-              <button
-                type="button"
-                onClick={clearJsonB}
-                aria-label="Clear JSON B"
-                className="absolute right-3 top-3 rounded bg-white/90 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-zinc-900/90 dark:text-slate-200 dark:hover:bg-zinc-700"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-col md:col-span-2">
+        <div className="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-3">
+          <JsonSourceCard
+            environment="Dev"
+            id="dev-json"
+            value={devJson}
+            onChange={(value) => {
+              resetSourceDerivedState();
+              setDevJson(value);
+            }}
+            onClear={clearDevJson}
+            onFileChange={handleDevFileChange}
+          />
+          <JsonSourceCard
+            environment="QA"
+            id="qa-json"
+            value={qaJson}
+            onChange={(value) => {
+              resetSourceDerivedState();
+              setQaJson(value);
+            }}
+            onClear={clearQaJson}
+            onFileChange={handleQaFileChange}
+          />
+          <JsonSourceCard
+            environment="Prod"
+            id="prod-json"
+            value={prodJson}
+            onChange={(value) => {
+              resetSourceDerivedState();
+              setProdJson(value);
+            }}
+            onClear={clearProdJson}
+            onFileChange={handleProdFileChange}
+          />
+          <div className="flex flex-col lg:col-span-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <label
                 htmlFor="ignore-fields"
@@ -519,7 +532,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleGenerateIgnoreRules}
-                disabled={!jsonA.trim() || !jsonB.trim()}
+                disabled={populatedJsonCount < 2}
                 className="rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-950 dark:disabled:border-zinc-700 dark:disabled:text-zinc-600"
               >
                 Generate Ignore Rules
@@ -561,68 +574,43 @@ export default function Home() {
         {/* Action Buttons */}
         {/* Optional URL fetcher */}
         <div className="flex flex-col gap-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <input
-                id="url-a"
-                aria-label="API URL A"
-                value={urlA}
-                onChange={(e) => setUrlA(e.target.value)}
-                placeholder="API URL A (optional)"
-                className="w-full p-3 pr-16 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-              {urlA && (
-                <button
-                  type="button"
-                  onClick={() => setUrlA('')}
-                  aria-label="Clear API URL A"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 dark:hover:bg-zinc-700"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                id="url-b"
-                aria-label="API URL B"
-                value={urlB}
-                onChange={(e) => setUrlB(e.target.value)}
-                placeholder="API URL B (optional)"
-                className="w-full p-3 pr-16 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-              {urlB && (
-                <button
-                  type="button"
-                  onClick={() => setUrlB('')}
-                  aria-label="Clear API URL B"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 dark:hover:bg-zinc-700"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <ApiUrlInput
+              environment="Dev"
+              value={devUrl}
+              onChange={setDevUrl}
+            />
+            <ApiUrlInput
+              environment="QA"
+              value={qaUrl}
+              onChange={setQaUrl}
+            />
+            <ApiUrlInput
+              environment="Prod"
+              value={prodUrl}
+              onChange={setProdUrl}
+            />
           </div>
         </div>
         <div className="flex justify-center gap-4 mb-8">
           <button
             onClick={handleFormatBoth}
             className="px-8 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:disabled:bg-zinc-800 text-gray-800 dark:text-gray-200 disabled:text-gray-400 dark:disabled:text-zinc-600 font-semibold rounded-lg transition-colors"
-            disabled={!jsonA.trim() && !jsonB.trim()}
+            disabled={!devJson.trim() && !qaJson.trim() && !prodJson.trim()}
           >
             Format JSON
           </button>
           <button
             onClick={handleCompare}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
-            disabled={!jsonA.trim() || !jsonB.trim()}
+            disabled={populatedJsonCount < 2}
           >
             Compare
           </button>
           <button
             onClick={handleFetchAndCompare}
             className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
-            disabled={!urlA.trim() || !urlB.trim() || isFetching}
+            disabled={populatedUrlCount < 2 || isFetching}
           >
             {isFetching ? 'Fetching…' : 'Fetch & Compare'}
           </button>
@@ -918,8 +906,9 @@ export default function Home() {
                   />
                 ) : (
                   <JsonTreeComparison
-                    jsonA={comparedJsonA}
-                    jsonB={comparedJsonB}
+                    devJson={comparedDevJson}
+                    qaJson={comparedQaJson}
+                    prodJson={comparedProdJson}
                     highlightedDiffs={diffs.filter((diff) => {
                       const matchesType =
                         diffFilter === 'ALL' || diff.type === diffFilter;
@@ -962,13 +951,118 @@ export default function Home() {
   );
 }
 
+function JsonSourceCard({
+  environment,
+  id,
+  value,
+  onChange,
+  onClear,
+  onFileChange,
+}: {
+  environment: 'Dev' | 'QA' | 'Prod';
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  onClear: () => void;
+  onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const fileInputId = `${id}-file`;
+
+  return (
+    <div className="flex flex-col">
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-slate-600 dark:bg-zinc-700 dark:text-slate-200"
+          >
+            {'{ }'}
+          </span>
+          <label
+            htmlFor={id}
+            className="text-lg font-semibold text-gray-900 dark:text-white"
+          >
+            {environment}
+          </label>
+        </div>
+        <label
+          htmlFor={fileInputId}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-gray-200 dark:hover:bg-zinc-700"
+        >
+          Upload {environment}
+        </label>
+        <input
+          id={fileInputId}
+          type="file"
+          accept=".json,application/json"
+          aria-label={`Upload ${environment}`}
+          onChange={onFileChange}
+          className="sr-only"
+        />
+      </div>
+      <div className="relative">
+        <textarea
+          id={id}
+          aria-label={environment}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={`Paste ${environment} JSON response here...`}
+          className="min-h-80 w-full flex-1 resize-y rounded-lg border border-gray-300 bg-white p-4 font-mono text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-gray-400"
+        />
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label={`Clear ${environment}`}
+          className="absolute right-3 top-3 rounded bg-white/90 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 dark:bg-zinc-900/90 dark:text-slate-200 dark:hover:bg-zinc-700"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ApiUrlInput({
+  environment,
+  value,
+  onChange,
+}: {
+  environment: 'Dev' | 'QA' | 'Prod';
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <input
+        aria-label={`${environment} API URL`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={`${environment} API URL (optional)`}
+        className="w-full rounded-lg border border-gray-300 bg-white p-3 pr-16 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label={`Clear ${environment} API URL`}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 dark:hover:bg-zinc-700"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 function JsonTreeComparison({
-  jsonA,
-  jsonB,
+  devJson,
+  qaJson,
+  prodJson,
   highlightedDiffs,
 }: {
-  jsonA: unknown;
-  jsonB: unknown;
+  devJson: unknown;
+  qaJson: unknown;
+  prodJson: unknown;
   highlightedDiffs: DiffEntry[];
 }) {
   const diffByPath = new Map(
@@ -977,19 +1071,25 @@ function JsonTreeComparison({
 
   return (
     <div
-      className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+      className="grid grid-cols-1 gap-4 xl:grid-cols-3"
       aria-label="JSON tree comparison"
     >
       <JsonTreePanel
-        title="JSON A Tree"
-        value={jsonA}
-        side="A"
+        title="Dev Tree"
+        value={devJson}
+        environment="Dev"
         diffByPath={diffByPath}
       />
       <JsonTreePanel
-        title="JSON B Tree"
-        value={jsonB}
-        side="B"
+        title="QA Tree"
+        value={qaJson}
+        environment="QA"
+        diffByPath={diffByPath}
+      />
+      <JsonTreePanel
+        title="Prod Tree"
+        value={prodJson}
+        environment="Prod"
         diffByPath={diffByPath}
       />
     </div>
@@ -999,12 +1099,12 @@ function JsonTreeComparison({
 function JsonTreePanel({
   title,
   value,
-  side,
+  environment,
   diffByPath,
 }: {
   title: string;
   value: unknown;
-  side: 'A' | 'B';
+  environment: 'Dev' | 'QA' | 'Prod';
   diffByPath: Map<string, DiffEntry>;
 }) {
   return (
@@ -1016,14 +1116,20 @@ function JsonTreePanel({
         {title}
       </h3>
       <div className="max-h-[36rem] overflow-auto p-4 font-mono text-sm">
-        <JsonTreeNode
-          value={value}
-          path=""
-          label="(root)"
-          side={side}
-          diffByPath={diffByPath}
-          depth={0}
-        />
+        {typeof value === 'undefined' ? (
+          <p className="font-sans text-gray-500 dark:text-gray-400">
+            No JSON provided
+          </p>
+        ) : (
+          <JsonTreeNode
+            value={value}
+            path=""
+            label="(root)"
+            environment={environment}
+            diffByPath={diffByPath}
+            depth={0}
+          />
+        )}
       </div>
     </section>
   );
@@ -1033,21 +1139,21 @@ function JsonTreeNode({
   value,
   path,
   label,
-  side,
+  environment,
   diffByPath,
   depth,
 }: {
   value: unknown;
   path: string;
   label: string;
-  side: 'A' | 'B';
+  environment: 'Dev' | 'QA' | 'Prod';
   diffByPath: Map<string, DiffEntry>;
   depth: number;
 }) {
   const diff = diffByPath.get(path);
-  const highlightClass = getTreeHighlightClassName(diff, side);
+  const highlightClass = getTreeHighlightClassName(diff, environment);
   const ariaLabel = diff
-    ? `${side === 'A' ? 'JSON A' : 'JSON B'} path ${path || '(root)'} ${diff.type}`
+    ? `${environment} path ${path || '(root)'} ${diff.type}`
     : undefined;
 
   if (Array.isArray(value)) {
@@ -1066,7 +1172,7 @@ function JsonTreeNode({
             value={item}
             path={`${path}[${index}]`}
             label={`[${index}]`}
-            side={side}
+            environment={environment}
             diffByPath={diffByPath}
             depth={depth + 1}
           />
@@ -1092,7 +1198,7 @@ function JsonTreeNode({
             value={childValue}
             path={path ? `${path}.${key}` : key}
             label={key}
-            side={side}
+            environment={environment}
             diffByPath={diffByPath}
             depth={depth + 1}
           />
@@ -1124,22 +1230,20 @@ function formatTreeValue(value: unknown): string {
 
 function getTreeHighlightClassName(
   diff: DiffEntry | undefined,
-  side: 'A' | 'B',
+  environment: 'Dev' | 'QA' | 'Prod',
 ): string {
   if (!diff) {
     return '';
   }
 
   if (diff.type === 'ADDED') {
-    return side === 'B'
+    return hasEnvironmentValue(diff, environment)
       ? 'bg-green-100 text-green-900 ring-1 ring-green-300 dark:bg-green-950 dark:text-green-200 dark:ring-green-800'
       : '';
   }
 
   if (diff.type === 'REMOVED') {
-    return side === 'A'
-      ? 'bg-red-100 text-red-900 ring-1 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800'
-      : '';
+    return 'bg-red-100 text-red-900 ring-1 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800';
   }
 
   if (diff.type === 'TYPE_CHANGE') {
@@ -1147,6 +1251,20 @@ function getTreeHighlightClassName(
   }
 
   return 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800';
+}
+
+function hasEnvironmentValue(
+  diff: DiffEntry,
+  environment: 'Dev' | 'QA' | 'Prod',
+): boolean {
+  const key =
+    environment === 'Dev'
+      ? 'devValue'
+      : environment === 'QA'
+        ? 'qaValue'
+        : 'prodValue';
+
+  return Object.prototype.hasOwnProperty.call(diff, key);
 }
 
 function DiffTable({
@@ -1184,14 +1302,15 @@ function DiffTable({
     <div className="overflow-x-auto bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg">
       <table
         aria-label="Differences"
-        className="w-full min-w-[720px] border-collapse text-left text-sm"
+        className="w-full min-w-[900px] border-collapse text-left text-sm"
       >
         <thead className="bg-gray-100 dark:bg-zinc-900 text-gray-700 dark:text-gray-200">
           <tr>
             <th className="px-4 py-3 font-semibold">Path</th>
             <th className="px-4 py-3 font-semibold">Type</th>
-            <th className="px-4 py-3 font-semibold">JSON A</th>
-            <th className="px-4 py-3 font-semibold">JSON B</th>
+            <th className="px-4 py-3 font-semibold">Dev</th>
+            <th className="px-4 py-3 font-semibold">QA</th>
+            <th className="px-4 py-3 font-semibold">Prod</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-zinc-700">
@@ -1208,10 +1327,13 @@ function DiffTable({
                 </span>
               </td>
               <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-                {formatValue(diff.oldValue)}
+                {formatValue(diff.devValue)}
               </td>
               <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-                {formatValue(diff.newValue)}
+                {formatValue(diff.qaValue)}
+              </td>
+              <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                {formatValue(diff.prodValue)}
               </td>
             </tr>
           ))}
@@ -1261,4 +1383,21 @@ function getTypeClassName(type: DiffEntry['type']): string {
     case 'TYPE_CHANGE':
       return 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
   }
+}
+
+type OptionalJsonSuccess = { ok: true; active: boolean; value: unknown };
+
+type OptionalJsonResult =
+  | OptionalJsonSuccess
+  | { ok: false; active: true };
+
+function parseOptionalJson(input: string): OptionalJsonResult {
+  if (!input.trim()) {
+    return { ok: true, active: false, value: undefined };
+  }
+
+  const parsed = parseJson(input);
+  return parsed.ok
+    ? { ok: true, active: true, value: parsed.value }
+    : { ok: false, active: true };
 }
