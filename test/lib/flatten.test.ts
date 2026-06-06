@@ -37,4 +37,14 @@ describe('flatten', () => {
       emptyArray: [],
     });
   });
+
+  it('handles root arrays', () => {
+    expect(
+      flatten([
+        { name: 'Arnab' }
+      ])
+    ).toEqual({
+      '[0].name': 'Arnab'
+    });
+  });
 });

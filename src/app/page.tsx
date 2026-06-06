@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { compareJson } from '@/src/lib/compare';
 import type { DiffEntry } from '@/src/types/diff';
+import { ThemeToggle } from '@/src/components/theme-toggle';
 
 export default function Home() {
   const [jsonA, setJsonA] = useState('');
@@ -10,6 +11,17 @@ export default function Home() {
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyDiff = () => {
+    const textToCopy = JSON.stringify(diffs, null, 2);
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy diff:', err);
+    });
+  };
 
   const handleCompare = () => {
     setError('');
@@ -34,14 +46,44 @@ export default function Home() {
     setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value));
   };
 
+  const handleFormatBoth = () => {
+    let hasError = false;
+    let newError = '';
+
+    if (jsonA.trim()) {
+      try {
+        setJsonA(JSON.stringify(JSON.parse(jsonA), null, 2));
+      } catch {
+        newError += 'Invalid JSON in Response A. ';
+        hasError = true;
+      }
+    }
+
+    if (jsonB.trim()) {
+      try {
+        setJsonB(JSON.stringify(JSON.parse(jsonB), null, 2));
+      } catch {
+        newError += 'Invalid JSON in Response B.';
+        hasError = true;
+      }
+    }
+
+    if (hasError) {
+      setError(newError.trim());
+    } else {
+      setError('');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 transition-colors">
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
-        <div className="max-w-6xl mx-auto px-4 py-6">
+      <header className="bg-white dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 transition-colors">
+        <div className="max-w-6xl mx-auto px-4 py-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             API Response Comparator
           </h1>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -86,8 +128,15 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Compare Button */}
-        <div className="flex justify-center mb-8">
+        {/* Action Buttons */}
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={handleFormatBoth}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:disabled:bg-zinc-800 text-gray-800 dark:text-gray-200 disabled:text-gray-400 dark:disabled:text-zinc-600 font-semibold rounded-lg transition-colors"
+            disabled={!jsonA.trim() && !jsonB.trim()}
+          >
+            Format JSON
+          </button>
           <button
             onClick={handleCompare}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
@@ -102,9 +151,37 @@ export default function Home() {
 
         {/* Results Section */}
         <section>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Results
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Results
+            </h2>
+            {hasCompared && !error && (
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    Diff Counters
+                  </span>
+                  <div className="flex gap-2">
+                    <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 rounded font-medium">
+                      Added: {diffs.filter((d) => d.type === 'ADDED').length}
+                    </span>
+                    <span className="px-2 py-1 bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 rounded font-medium">
+                      Removed: {diffs.filter((d) => d.type === 'REMOVED').length}
+                    </span>
+                    <span className="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded font-medium">
+                      Changed: {diffs.filter((d) => d.type === 'CHANGED').length}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCopyDiff}
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-gray-800 dark:text-gray-200 font-medium rounded transition-colors"
+                >
+                  {copied ? 'Copied!' : 'Copy Diff'}
+                </button>
+              </div>
+            )}
+          </div>
           {error ? (
             <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-300">
               {error}
