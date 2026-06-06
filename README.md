@@ -1,6 +1,6 @@
 ![Website Deploy](https://deploy-badge.vercel.app/?url=http://www.nextjs.org/&name=api-response-comparator)
-[![Tests Status](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/arnabnandy7/api-response-comparator/blob/main/LICENSE)
+[![Test Status](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/arnabnandy7/api-response-comparator/blob/main/LICENSE)[![CodeQL Advanced](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/codeql.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/codeql.yml)[![Dependabot Updates](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/dependabot/dependabot-updates)[![Remove Stale Branches](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/stale-branches.yml/badge.svg)](https://github.com/arnabnandy7/api-response-comparator/actions/workflows/stale-branches.yml)
 
 # API Response Comparator
 
