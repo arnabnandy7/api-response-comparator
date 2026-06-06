@@ -144,8 +144,13 @@ export async function GET(request: Request) {
     );
   }
 
-  const safeTarget = new URL(target.toString());
-  safeTarget.hostname = normalizedHost;
+  const safeTarget = new URL(`${target.protocol}//${normalizedHost}`);
+  if (target.port) {
+    safeTarget.port = target.port;
+  }
+  safeTarget.pathname = target.pathname;
+  safeTarget.search = target.search;
+  safeTarget.hash = target.hash;
 
   try {
     const controller = new AbortController();
