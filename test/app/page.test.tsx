@@ -155,6 +155,27 @@ describe('Home', () => {
     expect(within(table).getByText('ADDED')).toBeInTheDocument();
   });
 
+  it('clears each API URL independently', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const urlA = screen.getByLabelText('API URL A');
+    const urlB = screen.getByLabelText('API URL B');
+
+    await user.type(urlA, 'https://api.a.test');
+    await user.type(urlB, 'https://api.b.test');
+    await user.click(screen.getByRole('button', { name: 'Clear API URL A' }));
+
+    expect(urlA).toHaveValue('');
+    expect(urlB).toHaveValue('https://api.b.test');
+    expect(screen.queryByRole('button', { name: 'Clear API URL A' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear API URL B' }));
+
+    expect(urlB).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Clear API URL B' })).not.toBeInTheDocument();
+  });
+
   it('shows a response A validation error for invalid JSON', async () => {
     const user = userEvent.setup();
 

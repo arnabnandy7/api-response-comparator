@@ -407,20 +407,46 @@ export default function Home() {
         {/* Optional URL fetcher */}
         <div className="flex flex-col gap-4 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              id="url-a"
-              value={urlA}
-              onChange={(e) => setUrlA(e.target.value)}
-              placeholder="API URL A (optional)"
-              className="p-3 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            <input
-              id="url-b"
-              value={urlB}
-              onChange={(e) => setUrlB(e.target.value)}
-              placeholder="API URL B (optional)"
-              className="p-3 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
+            <div className="relative">
+              <input
+                id="url-a"
+                aria-label="API URL A"
+                value={urlA}
+                onChange={(e) => setUrlA(e.target.value)}
+                placeholder="API URL A (optional)"
+                className="w-full p-3 pr-16 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              {urlA && (
+                <button
+                  type="button"
+                  onClick={() => setUrlA('')}
+                  aria-label="Clear API URL A"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 dark:hover:bg-zinc-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                id="url-b"
+                aria-label="API URL B"
+                value={urlB}
+                onChange={(e) => setUrlB(e.target.value)}
+                placeholder="API URL B (optional)"
+                className="w-full p-3 pr-16 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              {urlB && (
+                <button
+                  type="button"
+                  onClick={() => setUrlB('')}
+                  aria-label="Clear API URL B"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-200 dark:hover:bg-zinc-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex justify-center gap-4 mb-8">
