@@ -53,4 +53,40 @@ describe('compareJson', () => {
 
     expect(compareJson(value, value)).toEqual([]);
   });
+
+  it('returns changed diff for array root when an empty array becomes an array of objects', () => {
+    const jsonA = { x: [] };
+    const jsonB = { x: [{ j: '' }] };
+
+    expect(compareJson(jsonA, jsonB)).toEqual([
+      {
+        path: 'x',
+        type: 'CHANGED',
+        oldValue: [],
+        newValue: [{ j: '' }],
+      },
+      {
+        path: 'x[0].j',
+        type: 'ADDED',
+        newValue: '',
+      },
+    ]);
+  });
+
+  it('ignores specified fields when comparing JSON', () => {
+    const jsonA = {
+      user: {
+        creatUserId: 'abc',
+        name: 'Arnab',
+      },
+    };
+    const jsonB = {
+      user: {
+        creatUserId: 'def',
+        name: 'Arnab',
+      },
+    };
+
+    expect(compareJson(jsonA, jsonB, ['creatUserId'])).toEqual([]);
+  });
 });

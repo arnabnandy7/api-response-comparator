@@ -162,4 +162,4 @@ The UI catches parse errors and displays the parser message instead of running t
 
 ## Contributing
 
-See [contributor.md](./contributor.md) for local workflow, testing expectations, and project conventions.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for local workflow, testing expectations, and project conventions.
