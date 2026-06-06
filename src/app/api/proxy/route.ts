@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { isIP } from 'net';
 
 const PRIVATE_IPV6_PREFIXES = ['::1', 'fc00', 'fd00', 'fe80'];
+const ALLOWED_PROXY_HOSTS = new Set(
+  (process.env.ALLOWED_PROXY_HOSTS ?? '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 function isPrivateIpv4(address: string) {
   const parts = address.split('.').map((part) => Number(part));
@@ -76,6 +82,14 @@ export async function GET(request: Request) {
   if (isPrivateIpAddress(target.hostname) || target.hostname === 'localhost') {
     return NextResponse.json(
       { error: 'Private and local addresses are not allowed' },
+      { status: 400 },
+    );
+  }
+
+  const normalizedHost = target.hostname.toLowerCase();
+  if (ALLOWED_PROXY_HOSTS.size > 0 && !ALLOWED_PROXY_HOSTS.has(normalizedHost)) {
+    return NextResponse.json(
+      { error: 'Target host is not allowed' },
       { status: 400 },
     );
   }
