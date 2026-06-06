@@ -127,8 +127,13 @@ describe('Home', () => {
     };
 
     vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url === 'https://api.a.test') return Promise.resolve(respA as any);
-      if (url === 'https://api.b.test') return Promise.resolve(respB as any);
+      const requestUrl = new URL(url, 'http://localhost');
+      if (requestUrl.pathname === '/api/proxy') {
+        const target = requestUrl.searchParams.get('url');
+        if (target === 'https://api.a.test') return Promise.resolve(respA as any);
+        if (target === 'https://api.b.test') return Promise.resolve(respB as any);
+      }
+
       return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found', text: async () => '' } as any);
     }));
 

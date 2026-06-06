@@ -154,41 +154,46 @@ export default function Home() {
     }
   };
 
+  const getProxyUrl = (target: string) =>
+    `/api/proxy?url=${encodeURIComponent(target)}`;
+
+  const fetchWithProxy = async (targetUrl: string) => {
+    const response = await fetch(getProxyUrl(targetUrl), {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${targetUrl}: ${response.status} ${response.statusText}`);
+    }
+
+    return response.text();
+  };
+
   const handleFetchAndCompare = async () => {
     setError('');
     setIsFetching(true);
     setHasCompared(true);
 
     try {
-      const [respA, respB] = await Promise.all([
-        fetch(urlA, { cache: 'no-store' }),
-        fetch(urlB, { cache: 'no-store' }),
+      const [textA, textB] = await Promise.all([
+        fetchWithProxy(urlA),
+        fetchWithProxy(urlB),
       ]);
 
-      if (!respA.ok) {
-        throw new Error(`Failed to fetch A: ${respA.status} ${respA.statusText}`);
-      }
-      if (!respB.ok) {
-        throw new Error(`Failed to fetch B: ${respB.status} ${respB.statusText}`);
-      }
-
-      const [textA, textB] = await Promise.all([respA.text(), respB.text()]);
-
-      // Try to parse to validate JSON; if parse fails, surface error
       let parsedA: unknown;
       let parsedB: unknown;
+
       try {
         parsedA = JSON.parse(textA);
-      } catch (e) {
+      } catch {
         throw new Error('Response A is not valid JSON');
       }
       try {
         parsedB = JSON.parse(textB);
-      } catch (e) {
+      } catch {
         throw new Error('Response B is not valid JSON');
       }
 
-      // update textareas with pretty JSON for inspection
       setJsonA(JSON.stringify(parsedA, null, 2));
       setJsonB(JSON.stringify(parsedB, null, 2));
 
