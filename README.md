@@ -18,9 +18,15 @@ Parse JSON
 ## Features
 
 - Paste two JSON responses side by side
+- Fetch and compare two remote JSON API URLs directly
+- Upload JSON files for Response A and Response B
 - Detect added, removed, and changed values
+- Optionally ignore specific fields during comparison
+- Copy diff output as JSON to clipboard
+- Download diff results as a styled Excel spreadsheet
+- Light/dark theme toggle
 - Flatten nested objects and arrays into readable paths
-- Display differences in a table with old and new values
+- Display results in an accessible diff table
 - Show parse errors for invalid JSON
 - Unit and UI tests with Vitest and Testing Library
 
@@ -48,6 +54,16 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## How to Use
+
+1. Paste JSON into `JSON A` and `JSON B`, or upload files using the upload buttons.
+2. Optionally enter `API URL A` and `API URL B` to fetch remote JSON responses.
+3. Use `Ignore fields` to exclude sensitive or irrelevant keys from the diff.
+4. Click `Compare` or `Fetch & Compare`.
+5. Copy the diff JSON or download an Excel report.
+
+Remote URLs are fetched server-side through `/api/proxy`, which helps avoid browser CORS restrictions for external JSON endpoints.
 
 ## Scripts
 

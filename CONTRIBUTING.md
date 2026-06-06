@@ -10,11 +10,23 @@ Install dependencies:
 npm install
 ```
 
-Run the app:
+Run the app locally:
 
 ```bash
 npm run dev
 ```
+
+The app supports:
+
+- manual paste for `JSON A` and `JSON B`
+- JSON file uploads for each response
+- remote JSON fetch comparison using `API URL A` and `API URL B`
+- ignore-field filtering during comparison
+- copying diffs to the clipboard
+- downloading diffs as an Excel spreadsheet
+- light/dark theme toggling
+
+## Verification
 
 Run checks before opening a pull request:
 
@@ -37,20 +49,23 @@ npm run build
 Tests live outside `src` under the `test` directory:
 
 ```text
-test/app/      UI tests for src/app
-test/lib/      Utility tests for src/lib
-test/types/    Type contract tests for src/types
+test/app/             UI tests for src/app
+test/app/api/proxy/    API route tests for src/app/api/proxy
+test/lib/             Utility tests for src/lib
+test/types/           Type contract tests for src/types
 ```
 
-Use Vitest for all tests. Use React Testing Library for UI behavior and prefer user-visible queries such as labels, roles, and text.
+Use Vitest for all tests. Use React Testing Library for UI behavior and prefer user-visible queries such as labels, roles, and text. For route tests, use the node test environment and stub `fetch` as needed.
 
 ## Code Conventions
 
 - Keep TypeScript strict and explicit where it helps readability.
 - Keep comparison logic in `src/lib`.
 - Keep shared data shapes in `src/types`.
-- Keep UI state and rendering in `src/app/page.tsx` unless the UI grows enough to justify components.
+- Keep UI state and rendering in `src/app/page.tsx` unless the UI grows enough to justify splitting into components.
+- Keep proxy or route-specific logic in `src/app/api/proxy/route.ts`.
 - Avoid unrelated refactors in feature or bug-fix changes.
+- Preserve accessibility in the UI; labels should be connected to inputs and controls.
 
 ## Comparator Behavior
 
@@ -61,7 +76,7 @@ JSON A = original value
 JSON B = new value
 ```
 
-The app parses both inputs, flattens nested values, compares flattened paths, and renders `DiffEntry[]`.
+The app parses both inputs or fetches remote JSON, flattens nested values, compares flattened paths, and renders `DiffEntry[]`.
 
 Supported diff types:
 
@@ -75,4 +90,4 @@ Supported diff types:
 - `npm test` passes
 - `npm run lint` passes
 - `npm run build` passes
-- README or contributor docs updated when behavior or workflow changes
+- README, Agents, or Claude docs updated when behavior or workflow changes

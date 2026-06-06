@@ -9,17 +9,30 @@ This is a Next.js app that compares two JSON API responses.
 Core flow:
 
 ```text
-Parse JSON
+Parse JSON or fetch remote JSON
 -> Flatten nested paths
 -> Compare flattened values
 -> Display DiffEntry[] in a table
 ```
 
+The app supports:
+
+- manual paste entry for `JSON A` and `JSON B`
+- JSON file uploads for each response
+- remote API URL fetching via `/api/proxy`
+- ignore-field filtering during comparison
+- copy diff output to clipboard
+- download styled Excel reports
+- light/dark theme toggling
+
 ## Important Files
 
 - `src/app/page.tsx`: main UI and user interaction
+- `src/app/api/proxy/route.ts`: server-side proxy route for fetching external JSON URLs
+- `src/components/theme-toggle.tsx`: theme toggle button for light/dark mode
+- `src/components/theme-provider.tsx`: theme provider wrapper
 - `src/lib/flatten.ts`: converts JSON values into path-value pairs
-- `src/lib/compare.ts`: compares flattened JSON values
+- `src/lib/compare.ts`: compares flattened JSON values and supports ignore keys
 - `src/types/diff.ts`: shared `DiffEntry` type
 - `test/`: test suite mirroring the `src/` hierarchy
 
@@ -31,16 +44,18 @@ Parse JSON
 - Mirror source hierarchy when adding tests:
 
 ```text
-src/app/page.tsx      -> test/app/page.test.tsx
-src/lib/compare.ts    -> test/lib/compare.test.ts
-src/lib/flatten.ts    -> test/lib/flatten.test.ts
-src/types/diff.ts     -> test/types/diff.test.ts
+src/app/page.tsx              -> test/app/page.test.tsx
+src/app/api/proxy/route.ts    -> test/app/api/proxy/route.test.ts
+src/lib/compare.ts            -> test/lib/compare.test.ts
+src/lib/flatten.ts            -> test/lib/flatten.test.ts
+src/types/diff.ts             -> test/types/diff.test.ts
 ```
 
 - Prefer small, focused changes.
 - Avoid unrelated refactors.
 - Preserve accessibility in the UI. Labels should be associated with controls.
 - Use visible UI behavior in React Testing Library tests.
+- For route handlers, prefer node-compatible test environments and stub `fetch` appropriately.
 
 ## Commands
 
@@ -68,7 +83,7 @@ For meaningful code changes, run all three before finishing.
 
 `JSON A` is the original value. `JSON B` is the new value.
 
-`compareJson(jsonA, jsonB)` returns:
+`compareJson(jsonA, jsonB, ignoreKeys?)` returns:
 
 ```ts
 DiffEntry[]
@@ -79,6 +94,8 @@ Supported diff types:
 - `ADDED`: path exists only in `JSON B`
 - `REMOVED`: path exists only in `JSON A`
 - `CHANGED`: path exists in both, but values differ
+
+The app flattens nested objects and arrays so differences appear as paths like `user.name` or `items[0].price`.
 
 ## Dependency Note
 
