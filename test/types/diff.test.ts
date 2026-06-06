@@ -5,7 +5,7 @@ describe('DiffEntry', () => {
   it('represents the supported diff entry shape', () => {
     expectTypeOf<DiffEntry>().toEqualTypeOf<{
       path: string;
-      type: 'ADDED' | 'REMOVED' | 'CHANGED';
+      type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'TYPE_CHANGE';
       oldValue?: unknown;
       newValue?: unknown;
     }>();
