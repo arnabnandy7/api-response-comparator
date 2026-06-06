@@ -127,7 +127,7 @@ The comparator returns an array of `DiffEntry` objects:
 ```ts
 export interface DiffEntry {
   path: string;
-  type: 'ADDED' | 'REMOVED' | 'CHANGED';
+  type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'TYPE_CHANGE';
   oldValue?: unknown;
   newValue?: unknown;
 }
@@ -138,6 +138,10 @@ Examples:
 - `ADDED`: path exists in `JSON B` but not in `JSON A`
 - `REMOVED`: path exists in `JSON A` but not in `JSON B`
 - `CHANGED`: path exists in both, but the values differ
+- `TYPE_CHANGE`: path exists in both, but the JSON value type differs
+
+Comparisons containing `ADDED`, `REMOVED`, or `TYPE_CHANGE` entries display an
+API contract change alert.
 
 ## FAQ
 

@@ -89,4 +89,26 @@ describe('compareJson', () => {
 
     expect(compareJson(jsonA, jsonB, ['creatUserId'])).toEqual([]);
   });
+
+  it('reports a type change when the same path changes JSON type', () => {
+    expect(
+      compareJson(
+        { user: { id: 101, active: true } },
+        { user: { id: '101', active: 'true' } },
+      ),
+    ).toEqual([
+      {
+        path: 'user.active',
+        type: 'TYPE_CHANGE',
+        oldValue: true,
+        newValue: 'true',
+      },
+      {
+        path: 'user.id',
+        type: 'TYPE_CHANGE',
+        oldValue: 101,
+        newValue: '101',
+      },
+    ]);
+  });
 });

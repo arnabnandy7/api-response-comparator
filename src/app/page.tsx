@@ -2,14 +2,12 @@
 
 import { useState, type ChangeEvent } from 'react';
 import { compareJson } from '@/src/lib/compare';
-import { compareJsonSchemas } from '@/src/lib/compare-schema';
 import {
   generateIgnoreSuggestions,
   getIgnoreFieldFromPath,
   type IgnoreSuggestion,
 } from '@/src/lib/ignore-rules';
 import type { DiffEntry } from '@/src/types/diff';
-import type { SchemaDiffEntry } from '@/src/types/schema-diff';
 import { ThemeToggle } from '@/src/components/theme-toggle';
 
 export default function Home() {
@@ -18,12 +16,10 @@ export default function Home() {
   const [urlA, setUrlA] = useState('');
   const [urlB, setUrlB] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
-  const [schemaDiffs, setSchemaDiffs] = useState<SchemaDiffEntry[]>([]);
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [schemaCopied, setSchemaCopied] = useState(false);
   const [ignoreFields, setIgnoreFields] = useState('');
   const [ignoreSuggestions, setIgnoreSuggestions] = useState<IgnoreSuggestion[]>([]);
   const [toastMessage, setToastMessage] = useState('');
@@ -36,7 +32,6 @@ export default function Home() {
   const resetSourceDerivedState = () => {
     resetIgnoreRules();
     setDiffs([]);
-    setSchemaDiffs([]);
     setError('');
     setHasCompared(false);
   };
@@ -141,38 +136,6 @@ export default function Home() {
     );
   };
 
-  const handleCopySchemaDiff = () => {
-    navigator.clipboard.writeText(JSON.stringify(schemaDiffs, null, 2)).then(() => {
-      setSchemaCopied(true);
-      setTimeout(() => setSchemaCopied(false), 2000);
-    }).catch(err => {
-      console.error('Failed to copy schema diff:', err);
-    });
-  };
-
-  const handleDownloadSchemaJson = () => {
-    const blob = new Blob([JSON.stringify(schemaDiffs, null, 2)], {
-      type: 'application/json',
-    });
-    downloadBlob(blob, 'api-schema-diff.json');
-  };
-
-  const handleDownloadSchemaExcel = () => {
-    return downloadExcel(
-      [
-        ['Path', 'Schema Change', 'JSON A Type', 'JSON B Type'],
-        ...schemaDiffs.map((diff) => [
-          diff.path || '(root)',
-          diff.type,
-          diff.oldType ?? '',
-          diff.newType ?? '',
-        ]),
-      ],
-      'Schema Diff',
-      'api-schema-diff.xlsx',
-    );
-  };
-
   const handleCompare = () => {
     setError('');
     setHasCompared(true);
@@ -199,9 +162,6 @@ export default function Home() {
       .filter(Boolean);
 
     setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value, ignoreKeys));
-    setSchemaDiffs(
-      compareJsonSchemas(parsedJsonA.value, parsedJsonB.value, ignoreKeys),
-    );
   };
 
   const handleFormatBoth = () => {
@@ -326,12 +286,10 @@ export default function Home() {
       setJsonB(JSON.stringify(parsedB, null, 2));
       resetIgnoreRules();
       setDiffs(compareJson(parsedA, parsedB));
-      setSchemaDiffs(compareJsonSchemas(parsedA, parsedB));
       showToast('Fetched and compared responses');
     } catch (err: any) {
       console.error(err);
       setDiffs([]);
-      setSchemaDiffs([]);
       setError(err?.message || 'Failed to fetch and compare URLs');
     } finally {
       setIsFetching(false);
@@ -665,6 +623,9 @@ export default function Home() {
                       <span className="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded font-medium">
                         Changed: {diffs.filter((d) => d.type === 'CHANGED').length}
                       </span>
+                      <span className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded font-medium">
+                        Type changes: {diffs.filter((d) => d.type === 'TYPE_CHANGE').length}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -763,197 +724,45 @@ export default function Home() {
                 {error}
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
+                {hasCompared &&
+                  diffs.some((diff) =>
+                    ['ADDED', 'REMOVED', 'TYPE_CHANGE'].includes(diff.type),
+                  ) && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 p-4 text-orange-900 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        className="mt-0.5 h-5 w-5 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z" />
+                        <path d="M12 9v4" />
+                        <path d="M12 17h.01" />
+                      </svg>
+                      <div>
+                        <p className="font-semibold">API contract changes detected</p>
+                        <p className="mt-1 text-sm">
+                          Added, removed, or type-changed fields may require updates
+                          in API consumers.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 <DiffTable diffs={diffs} hasCompared={hasCompared} />
-                {schemaDiffs.length > 0 && (
-                  <SchemaDiffTable
-                    schemaDiffs={schemaDiffs}
-                    copied={schemaCopied}
-                    onCopy={handleCopySchemaDiff}
-                    onDownloadExcel={handleDownloadSchemaExcel}
-                    onDownloadJson={handleDownloadSchemaJson}
-                  />
-                )}
               </div>
             )}
           </section>
         )}
       </main>
     </div>
-  );
-}
-
-function SchemaDiffTable({
-  schemaDiffs,
-  copied,
-  onCopy,
-  onDownloadExcel,
-  onDownloadJson,
-}: {
-  schemaDiffs: SchemaDiffEntry[];
-  copied: boolean;
-  onCopy: () => void;
-  onDownloadExcel: () => void;
-  onDownloadJson: () => void;
-}) {
-  return (
-    <section aria-labelledby="schema-differences-heading">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3
-          id="schema-differences-heading"
-          className="text-xl font-bold text-gray-900 dark:text-white"
-        >
-          Schema Differences
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-purple-100 px-2 py-1 text-sm font-semibold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-            {schemaDiffs.length} {schemaDiffs.length === 1 ? 'difference' : 'differences'}
-          </span>
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label="Copy Schema Diff"
-            title={copied ? 'Copied!' : 'Copy Schema Diff'}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900 ${
-              copied
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-zinc-700 dark:text-gray-200 dark:hover:bg-zinc-600'
-            }`}
-          >
-            {copied ? (
-              <CheckIcon />
-            ) : (
-              <ClipboardIcon />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={onDownloadExcel}
-            aria-label="Download Schema Excel"
-            title="Download Schema Excel"
-            className="inline-flex h-8 w-8 items-center justify-center rounded bg-emerald-600 text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
-          >
-            <ExcelIcon />
-          </button>
-          <button
-            type="button"
-            onClick={onDownloadJson}
-            aria-label="Download Schema JSON"
-            title="Download Schema JSON"
-            className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
-          >
-            <JsonIcon />
-          </button>
-        </div>
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-purple-200 bg-white dark:border-purple-900 dark:bg-zinc-800">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead className="bg-purple-50 text-gray-700 dark:bg-purple-950/40 dark:text-gray-200">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Path</th>
-              <th className="px-4 py-3 font-semibold">Schema Change</th>
-              <th className="px-4 py-3 font-semibold">JSON A Type</th>
-              <th className="px-4 py-3 font-semibold">JSON B Type</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-purple-100 dark:divide-purple-900">
-            {schemaDiffs.map((diff) => (
-              <tr key={`${diff.type}-${diff.path}`}>
-                <td className="px-4 py-3 font-mono text-gray-900 dark:text-gray-100">
-                  {diff.path || '(root)'}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex rounded bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-                    {diff.type}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300">
-                  {diff.oldType ?? '-'}
-                </td>
-                <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300">
-                  {diff.newType ?? '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function ClipboardIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="14" height="14" x="8" y="8" rx="2" />
-      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  );
-}
-
-function ExcelIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-      <path d="M14 2v6h6" />
-      <path d="m8 13 4 5" />
-      <path d="m12 13-4 5" />
-    </svg>
-  );
-}
-
-function JsonIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-      <path d="M14 2v6h6" />
-      <path d="M9 13c-1 0-1.5.5-1.5 1.5v.5c0 1-.5 1.5-1.5 1.5 1 0 1.5.5 1.5 1.5v.5C7.5 19.5 8 20 9 20" />
-      <path d="M15 13c1 0 1.5.5 1.5 1.5v.5c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5v.5c0 1-.5 1.5-1.5 1.5" />
-    </svg>
   );
 }
 
@@ -987,7 +796,7 @@ function DiffTable({
   return (
     <div className="overflow-x-auto bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg">
       <table
-        aria-label="Value differences"
+        aria-label="Differences"
         className="w-full min-w-[720px] border-collapse text-left text-sm"
       >
         <thead className="bg-gray-100 dark:bg-zinc-900 text-gray-700 dark:text-gray-200">
@@ -1062,5 +871,7 @@ function getTypeClassName(type: DiffEntry['type']): string {
       return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300';
     case 'CHANGED':
       return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+    case 'TYPE_CHANGE':
+      return 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
   }
 }

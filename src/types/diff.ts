@@ -2,7 +2,7 @@
 
 export interface DiffEntry {
   path: string;
-  type: "ADDED" | "REMOVED" | "CHANGED";
+  type: "ADDED" | "REMOVED" | "CHANGED" | "TYPE_CHANGE";
   oldValue?: unknown;
   newValue?: unknown;
 }

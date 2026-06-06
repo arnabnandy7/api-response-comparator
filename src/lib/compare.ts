@@ -67,7 +67,10 @@ export function compareJson(
     if (!isEqual(valuesA[path], valuesB[path])) {
       diffs.push({
         path,
-        type: 'CHANGED',
+        type:
+          getJsonType(valuesA[path]) === getJsonType(valuesB[path])
+            ? 'CHANGED'
+            : 'TYPE_CHANGE',
         oldValue: valuesA[path],
         newValue: valuesB[path],
       });
@@ -122,4 +125,10 @@ function isIgnoredPath(path: string, ignoreKeys: string[]): boolean {
 
 function isEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function getJsonType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
 }

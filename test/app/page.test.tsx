@@ -64,7 +64,7 @@ describe('Home', () => {
 
     await user.click(screen.getByRole('button', { name: 'Compare' }));
 
-    const table = screen.getByRole('table', { name: 'Value differences' });
+    const table = screen.getByRole('table', { name: 'Differences' });
 
     expect(within(table).getByText('added')).toBeInTheDocument();
     expect(within(table).getByText('ADDED')).toBeInTheDocument();
@@ -75,9 +75,12 @@ describe('Home', () => {
     expect(within(table).getByText('CHANGED')).toBeInTheDocument();
     expect(within(table).getByText('30')).toBeInTheDocument();
     expect(within(table).getByText('31')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'API contract changes detected',
+    );
   });
 
-  it('shows schema differences separately from value differences', async () => {
+  it('merges value and schema changes into one result table', async () => {
     const user = userEvent.setup();
     render(<Home />);
 
@@ -93,62 +96,22 @@ describe('Home', () => {
     }));
     await user.click(screen.getByRole('button', { name: 'Compare' }));
 
-    const schemaSection = screen.getByRole('region', { name: 'Schema Differences' });
-    const schemaTable = within(schemaSection).getByRole('table');
-
-    expect(within(schemaTable).getByText('user.email')).toBeInTheDocument();
-    expect(within(schemaTable).getByText('user.id')).toBeInTheDocument();
-    expect(within(schemaTable).getByText('user.legacy')).toBeInTheDocument();
-    expect(within(schemaTable).getByText('items[*].price')).toBeInTheDocument();
-    expect(within(schemaTable).getAllByText('TYPE_CHANGED')).toHaveLength(2);
+    const table = screen.getByRole('table', { name: 'Differences' });
+    expect(within(table).getByText('user.email')).toBeInTheDocument();
+    expect(within(table).getByText('user.id')).toBeInTheDocument();
+    expect(within(table).getByText('user.legacy')).toBeInTheDocument();
+    expect(within(table).getByText('items[0].price')).toBeInTheDocument();
+    expect(within(table).getAllByText('TYPE_CHANGE')).toHaveLength(2);
+    expect(screen.getByText('Type changes: 2')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Added, removed, or type-changed fields may require updates in API consumers.',
+    );
     expect(
-      within(schemaSection).getByRole('button', { name: 'Copy Schema Diff' }),
-    ).toBeInTheDocument();
-    expect(
-      within(schemaSection).getByRole('button', { name: 'Download Schema Excel' }),
-    ).toBeInTheDocument();
-    expect(
-      within(schemaSection).getByRole('button', { name: 'Download Schema JSON' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('region', { name: 'Schema Differences' }),
+    ).not.toBeInTheDocument();
   });
 
-  it('copies and downloads schema differences', async () => {
-    const user = userEvent.setup();
-    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
-    const createObjectURL = vi.fn(() => 'blob:schema-diff');
-    const revokeObjectURL = vi.fn();
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL,
-      revokeObjectURL,
-    });
-
-    render(<Home />);
-
-    await user.click(screen.getByLabelText('JSON A'));
-    await user.paste('{"id":1}');
-    await user.click(screen.getByLabelText('JSON B'));
-    await user.paste('{"id":"1"}');
-    await user.click(screen.getByRole('button', { name: 'Compare' }));
-
-    await user.click(screen.getByRole('button', { name: 'Copy Schema Diff' }));
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining('"type": "TYPE_CHANGED"'),
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Download Schema Excel' }));
-    const workbook = (ExcelJS.Workbook as unknown as vi.Mock).mock.results.at(-1)?.value;
-    expect(workbook.xlsx.writeBuffer).toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: 'Download Schema JSON' }));
-    expect(createObjectURL).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'application/json' }),
-    );
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:schema-diff');
-  });
-
-  it('does not show schema differences when only values change', async () => {
+  it('does not show the contract alert for value-only changes', async () => {
     const user = userEvent.setup();
     render(<Home />);
 
@@ -158,9 +121,8 @@ describe('Home', () => {
     await user.paste('{"user":{"age":31}}');
     await user.click(screen.getByRole('button', { name: 'Compare' }));
 
-    expect(
-      screen.queryByRole('region', { name: 'Schema Differences' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Changed: 1')).toBeInTheDocument();
   });
 
   it('shows the download Excel button alongside Copy Diff after compare', async () => {
@@ -264,7 +226,7 @@ describe('Home', () => {
     expect(screen.getByLabelText('JSON A')).toHaveValue(JSON.stringify({ user: { name: 'Arnab', age: 30 } }, null, 2));
     expect(screen.getByLabelText('JSON B')).toHaveValue(JSON.stringify({ user: { name: 'Arnab', age: 31 }, added: 'new' }, null, 2));
 
-    const table = await screen.findByRole('table', { name: 'Value differences' });
+    const table = await screen.findByRole('table', { name: 'Differences' });
     expect(within(table).getByText('user.age')).toBeInTheDocument();
     expect(within(table).getByText('CHANGED')).toBeInTheDocument();
     expect(within(table).getByText('added')).toBeInTheDocument();
