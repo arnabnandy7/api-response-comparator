@@ -12,6 +12,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [ignoreFields, setIgnoreFields] = useState('');
 
   const handleCopyDiff = () => {
     const textToCopy = JSON.stringify(diffs, null, 2);
@@ -43,7 +44,12 @@ export default function Home() {
       return;
     }
 
-    setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value));
+    const ignoreKeys = ignoreFields
+      .split(',')
+      .map((key) => key.trim())
+      .filter(Boolean);
+
+    setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value, ignoreKeys));
   };
 
   const handleFormatBoth = () => {
@@ -124,6 +130,21 @@ export default function Home() {
               placeholder="Paste JSON response here..."
               className="min-h-80 flex-1 p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-sm"
               spellCheck="false"
+            />
+          </div>
+          <div className="flex flex-col md:col-span-2">
+            <label
+              htmlFor="ignore-fields"
+              className="text-lg font-semibold text-gray-900 dark:text-white mb-2"
+            >
+              Ignore fields
+            </label>
+            <input
+              id="ignore-fields"
+              value={ignoreFields}
+              onChange={(e) => setIgnoreFields(e.target.value)}
+              placeholder="creatUserId, otherField"
+              className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
         </div>

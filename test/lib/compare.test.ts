@@ -53,4 +53,21 @@ describe('compareJson', () => {
 
     expect(compareJson(value, value)).toEqual([]);
   });
+
+  it('ignores specified fields when comparing JSON', () => {
+    const jsonA = {
+      user: {
+        creatUserId: 'abc',
+        name: 'Arnab',
+      },
+    };
+    const jsonB = {
+      user: {
+        creatUserId: 'def',
+        name: 'Arnab',
+      },
+    };
+
+    expect(compareJson(jsonA, jsonB, ['creatUserId'])).toEqual([]);
+  });
 });

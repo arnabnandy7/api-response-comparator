@@ -1,14 +1,24 @@
 import type { DiffEntry } from '@/src/types/diff';
 import { flatten } from './flatten';
 
-export function compareJson(jsonA: unknown, jsonB: unknown): DiffEntry[] {
+export function compareJson(
+  jsonA: unknown,
+  jsonB: unknown,
+  ignoreFields: string[] = [],
+): DiffEntry[] {
   const valuesA = flatten(jsonA);
   const valuesB = flatten(jsonB);
+  const ignoreKeys = ignoreFields.map((key) => key.trim()).filter(Boolean);
+
   const paths = Array.from(
     new Set([...Object.keys(valuesA), ...Object.keys(valuesB)]),
   ).sort();
 
   return paths.reduce<DiffEntry[]>((diffs, path) => {
+    if (isIgnoredPath(path, ignoreKeys)) {
+      return diffs;
+    }
+
     const jsonAHasPath = Object.prototype.hasOwnProperty.call(valuesA, path);
     const jsonBHasPath = Object.prototype.hasOwnProperty.call(valuesB, path);
 
@@ -41,6 +51,15 @@ export function compareJson(jsonA: unknown, jsonB: unknown): DiffEntry[] {
 
     return diffs;
   }, []);
+}
+
+function isIgnoredPath(path: string, ignoreKeys: string[]): boolean {
+  if (!ignoreKeys.length) {
+    return false;
+  }
+
+  const segments = path.split(/[\.\[\]]+/).filter(Boolean);
+  return segments.some((segment) => ignoreKeys.includes(segment));
 }
 
 function isEqual(left: unknown, right: unknown): boolean {
