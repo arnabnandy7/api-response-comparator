@@ -26,6 +26,13 @@ import Home from '@/src/app/page';
 
 afterEach(() => {
   cleanup();
+  // restore any global stubs (e.g. fetch) between tests
+  try {
+    vi.unstubAllGlobals();
+  } catch {
+    // no-op if not supported in this environment
+  }
+  vi.restoreAllMocks();
 });
 
 describe('Home', () => {
@@ -101,6 +108,51 @@ describe('Home', () => {
     expect(ExcelJS.Workbook).toHaveBeenCalled();
     const wbInstance = (ExcelJS.Workbook as unknown as vi.Mock).mock.results[0].value;
     expect(wbInstance.xlsx.writeBuffer).toHaveBeenCalled();
+  });
+
+  it('fetches two URLs and compares responses', async () => {
+    const user = userEvent.setup();
+
+    const respA = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({ user: { name: 'Arnab', age: 30 } }),
+    };
+    const respB = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({ user: { name: 'Arnab', age: 31 }, added: 'new' }),
+    };
+
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const requestUrl = new URL(url, 'http://localhost');
+      if (requestUrl.pathname === '/api/proxy') {
+        const target = requestUrl.searchParams.get('url');
+        if (target === 'https://api.a.test') return Promise.resolve(respA as any);
+        if (target === 'https://api.b.test') return Promise.resolve(respB as any);
+      }
+
+      return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found', text: async () => '' } as any);
+    }));
+
+    render(<Home />);
+
+    await user.type(screen.getByPlaceholderText('API URL A (optional)'), 'https://api.a.test');
+    await user.type(screen.getByPlaceholderText('API URL B (optional)'), 'https://api.b.test');
+
+    await user.click(screen.getByRole('button', { name: 'Fetch & Compare' }));
+
+    // after fetch, textareas should be populated and results shown
+    expect(screen.getByLabelText('JSON A')).toHaveValue(JSON.stringify({ user: { name: 'Arnab', age: 30 } }, null, 2));
+    expect(screen.getByLabelText('JSON B')).toHaveValue(JSON.stringify({ user: { name: 'Arnab', age: 31 }, added: 'new' }, null, 2));
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('user.age')).toBeInTheDocument();
+    expect(within(table).getByText('CHANGED')).toBeInTheDocument();
+    expect(within(table).getByText('added')).toBeInTheDocument();
+    expect(within(table).getByText('ADDED')).toBeInTheDocument();
   });
 
   it('shows a response A validation error for invalid JSON', async () => {
