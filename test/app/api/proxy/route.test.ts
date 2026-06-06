@@ -22,7 +22,26 @@ describe('GET /api/proxy', () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(JSON.stringify({ message: 'ok' }));
-    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/data', { cache: 'no-store' });
+    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/data', {
+      cache: 'no-store',
+      redirect: 'manual',
+    });
+  });
+
+  it('returns 400 for private IP targets', async () => {
+    const request = new Request('http://localhost/api/proxy?url=http://127.0.0.1/data');
+    const response = await GET(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Private and local addresses are not allowed' });
+  });
+
+  it('returns 400 for URLs with credentials', async () => {
+    const request = new Request('http://localhost/api/proxy?url=http://user:pass@api.example.com/data');
+    const response = await GET(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'URL credentials are not supported' });
   });
 
   it('returns 400 when the url parameter is missing', async () => {
