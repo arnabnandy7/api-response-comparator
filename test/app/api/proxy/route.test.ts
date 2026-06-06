@@ -1,62 +1,69 @@
 // @vitest-environment node
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '@/src/app/api/proxy/route';
 
-vi.mock('node:net', () => ({
-  isIP: (input: string) => {
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(input)) return 4;
-    if (/^:/.test(input)) return 6;
-    return 0;
-  },
+const { mockFetch, mockAgentClose } = vi.hoisted(() => ({
+  mockFetch: vi.fn(),
+  mockAgentClose: vi.fn(async () => undefined),
 }));
 
-vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(),
+vi.mock('undici', () => ({
+  Agent: vi.fn(function MockAgent() {
+    return { close: mockAgentClose };
+  }),
+  fetch: mockFetch,
 }));
 
 describe('GET /api/proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv('ALLOWED_PROXY_HOSTS', 'api.example.com');
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ message: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      }),
+    );
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   });
 
-  it('returns proxied response text for a valid URL', async () => {
-    const { lookup } = await import('node:dns/promises');
-    vi.mocked(lookup).mockResolvedValue([
-      {
-        address: '93.184.216.34',
-        family: 4,
-      },
-    ]);
-
-    const mockFetch = vi.fn(async () => {
-      return {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () => JSON.stringify({ message: 'ok' }),
-      } as unknown as Response;
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
+  it('returns proxied response text for an arbitrary HTTPS hostname', async () => {
     const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
     const response = await GET(request);
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(JSON.stringify({ message: 'ok' }));
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://api.example.com/data',
+      new URL('https://api.example.com/data'),
       expect.objectContaining({
-        cache: 'no-store',
-        redirect: 'error',
+        redirect: 'manual',
+        dispatcher: expect.any(Object),
       }),
+    );
+  });
+
+  it('validates and follows redirects one hop at a time', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://other.example.com/result' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('{"redirected":true}', { status: 200 }));
+
+    const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"redirected":true}');
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      new URL('https://other.example.com/result'),
+      expect.any(Object),
     );
   });
 
@@ -65,7 +72,9 @@ describe('GET /api/proxy', () => {
     const response = await GET(request);
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'Direct IP addresses are not supported' });
+    expect(await response.json()).toEqual({
+      error: 'Direct IP and local addresses are not supported',
+    });
   });
 
   it('returns 400 for private IP addresses', async () => {
@@ -73,11 +82,15 @@ describe('GET /api/proxy', () => {
     const response = await GET(request);
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'Private and local addresses are not allowed' });
+    expect(await response.json()).toEqual({
+      error: 'Direct IP and local addresses are not supported',
+    });
   });
 
   it('returns 400 for URLs with credentials', async () => {
-    const request = new Request('http://localhost/api/proxy?url=https://user:pass@api.example.com/data');
+    const request = new Request(
+      'http://localhost/api/proxy?url=https://user:pass@api.example.com/data',
+    );
     const response = await GET(request);
 
     expect(response.status).toBe(400);
@@ -90,48 +103,6 @@ describe('GET /api/proxy', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'Only https URLs are supported' });
-  });
-
-  it('returns 400 for a host that is not allowlisted', async () => {
-    const mockFetch = vi.fn();
-    vi.stubGlobal('fetch', mockFetch);
-
-    const request = new Request('http://localhost/api/proxy?url=https://other.example.com/data');
-    const response = await GET(request);
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'Target host is not allowed' });
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('rejects an allowlisted host when DNS includes a private address', async () => {
-    const { lookup } = await import('node:dns/promises');
-    vi.mocked(lookup).mockResolvedValue([
-      { address: '93.184.216.34', family: 4 },
-      { address: '127.0.0.1', family: 4 },
-    ]);
-
-    const mockFetch = vi.fn();
-    vi.stubGlobal('fetch', mockFetch);
-
-    const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
-    const response = await GET(request);
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: 'Hostname validation failed: Failed to resolve hostname: Resolved IP is in private range',
-    });
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('returns 503 when the proxy allowlist is not configured', async () => {
-    vi.stubEnv('ALLOWED_PROXY_HOSTS', '');
-
-    const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
-    const response = await GET(request);
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'Proxy host allowlist is not configured' });
   });
 
   it('returns 400 for custom ports', async () => {

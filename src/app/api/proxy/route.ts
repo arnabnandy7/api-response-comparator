@@ -1,194 +1,199 @@
-import { NextResponse } from 'next/server';
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import type { LookupAddress } from 'node:dns';
+import { BlockList, isIP } from 'node:net';
+import { NextResponse } from 'next/server';
+import { Agent, fetch as undiciFetch } from 'undici';
 
-const PRIVATE_IPV6_PREFIXES = ['::1', 'fc00', 'fd00', 'fe80'];
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_RESPONSE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_REDIRECTS = 5;
 
-function getAllowedProxyHosts() {
-  return (process.env.ALLOWED_PROXY_HOSTS ?? '')
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean);
-}
+const BLOCKED_ADDRESSES = new BlockList();
 
-function isPrivateIpv4(address: string) {
-  const parts = address.split('.').map((part) => Number(part));
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
-    return false;
-  }
+[
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+].forEach(([address, prefix]) => {
+  BLOCKED_ADDRESSES.addSubnet(address as string, prefix as number, 'ipv4');
+});
 
-  const [a, b] = parts;
+[
+  ['::', 128],
+  ['::1', 128],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['2001:db8::', 32],
+  ['ff00::', 8],
+].forEach(([address, prefix]) => {
+  BLOCKED_ADDRESSES.addSubnet(address as string, prefix as number, 'ipv6');
+});
+
+function isPublicIpAddress(address: string, family: number) {
   return (
-    a === 10 ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    (a === 192 && b === 168) ||
-    (a === 172 && b >= 16 && b <= 31)
+    (family === 4 || family === 6) &&
+    !BLOCKED_ADDRESSES.check(address, family === 4 ? 'ipv4' : 'ipv6')
   );
 }
 
-function isPrivateIpAddress(address: string) {
-  const version = isIP(address);
-  if (version === 4) {
-    return isPrivateIpv4(address);
-  }
-
-  if (version === 6) {
-    const normalized = address.toLowerCase();
-    return PRIVATE_IPV6_PREFIXES.some((prefix) => normalized.startsWith(prefix));
-  }
-
-  return false;
-}
-
-async function validateHostResolution(hostname: string): Promise<void> {
-  try {
-    const results = await lookup(hostname, { all: true });
-
-    if (results.length === 0) {
-      throw new Error('Hostname did not resolve to an IP address');
-    }
-
-    if (results.some(({ address }) => isPrivateIpAddress(address))) {
-      throw new Error('Resolved IP is in private range');
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to resolve hostname: ${error instanceof Error ? error.message : 'unknown error'}`,
-    );
-  }
-}
-
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const url = requestUrl.searchParams.get('url');
-
-  if (!url) {
-    return NextResponse.json(
-      { error: 'Missing url parameter' },
-      { status: 400 },
-    );
-  }
-
-  let target: URL;
-
-  try {
-    target = new URL(url);
-  } catch {
-    return NextResponse.json(
-      { error: 'Invalid URL' },
-      { status: 400 },
-    );
-  }
-
+function validateTarget(target: URL) {
   if (target.protocol !== 'https:') {
-    return NextResponse.json(
-      { error: 'Only https URLs are supported' },
-      { status: 400 },
-    );
+    throw new Error('Only https URLs are supported');
   }
 
   if (target.username || target.password) {
-    return NextResponse.json(
-      { error: 'URL credentials are not supported' },
-      { status: 400 },
-    );
+    throw new Error('URL credentials are not supported');
   }
 
   if (target.port) {
-    return NextResponse.json(
-      { error: 'Custom ports are not supported' },
-      { status: 400 },
-    );
+    throw new Error('Custom ports are not supported');
   }
 
-  // Reject direct IP addresses to enforce hostname validation
-  if (isIP(target.hostname) !== 0) {
-    if (isPrivateIpAddress(target.hostname)) {
-      return NextResponse.json(
-        { error: 'Private and local addresses are not allowed' },
-        { status: 400 },
-      );
-    }
-    return NextResponse.json(
-      { error: 'Direct IP addresses are not supported' },
-      { status: 400 },
-    );
+  if (isIP(target.hostname) !== 0 || target.hostname.toLowerCase() === 'localhost') {
+    throw new Error('Direct IP and local addresses are not supported');
+  }
+}
+
+async function resolvePublicAddresses(hostname: string): Promise<LookupAddress[]> {
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+
+  if (addresses.length === 0) {
+    throw new Error('Hostname did not resolve to an IP address');
   }
 
-  if (target.hostname === 'localhost') {
-    return NextResponse.json(
-      { error: 'Private and local addresses are not allowed' },
-      { status: 400 },
-    );
+  if (addresses.some(({ address, family }) => !isPublicIpAddress(address, family))) {
+    throw new Error('Hostname resolved to a non-public IP address');
   }
 
-  const normalizedHost = target.hostname.toLowerCase();
-  const allowedHost = getAllowedProxyHosts().find((host) => host === normalizedHost);
+  return addresses;
+}
 
-  if (!allowedHost) {
-    return NextResponse.json(
-      {
-        error: process.env.ALLOWED_PROXY_HOSTS
-          ? 'Target host is not allowed'
-          : 'Proxy host allowlist is not configured',
+function createPublicNetworkAgent() {
+  return new Agent({
+    connect: {
+      lookup(hostname, options, callback) {
+        resolvePublicAddresses(hostname)
+          .then((addresses) => {
+            if (options.all) {
+              callback(null, addresses);
+              return;
+            }
+
+            const address = addresses.find(({ family }) => {
+              return options.family === 0 || options.family === family;
+            });
+
+            if (!address) {
+              callback(new Error(`No public IPv${options.family} address found`), '', 0);
+              return;
+            }
+
+            callback(null, address.address, address.family);
+          })
+          .catch((error: unknown) => {
+            callback(error instanceof Error ? error : new Error('DNS lookup failed'), '', 0);
+          });
       },
-      { status: process.env.ALLOWED_PROXY_HOSTS ? 400 : 503 },
-    );
+    },
+  });
+}
+
+async function fetchPublicJson(target: URL, signal: AbortSignal) {
+  let currentTarget = target;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    validateTarget(currentTarget);
+
+    const agent = createPublicNetworkAgent();
+    try {
+      const response = await undiciFetch(currentTarget, {
+        dispatcher: agent,
+        redirect: 'manual',
+        signal,
+        headers: {
+          'user-agent': 'api-response-comparator/1.0',
+        },
+      });
+
+      if (response.status < 300 || response.status >= 400) {
+        return {
+          body: await response.text(),
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+        };
+      }
+
+      const location = response.headers.get('location');
+      await response.body?.cancel();
+
+      if (!location) {
+        throw new Error('Remote server returned a redirect without a location');
+      }
+
+      if (redirectCount === MAX_REDIRECTS) {
+        throw new Error('Too many redirects');
+      }
+
+      currentTarget = new URL(location, currentTarget);
+    } finally {
+      await agent.close();
+    }
   }
 
-  // Validate hostname resolves to a safe IP
+  throw new Error('Too many redirects');
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url).searchParams.get('url');
+
+  if (!url) {
+    return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
+  }
+
+  let target: URL;
   try {
-    await validateHostResolution(target.hostname);
+    target = new URL(url);
+    validateTarget(target);
   } catch (error) {
     return NextResponse.json(
-      {
-        error: `Hostname validation failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-      },
+      { error: error instanceof Error ? error.message : 'Invalid URL' },
       { status: 400 },
     );
   }
 
-  // The origin is selected from server configuration; user input only supplies
-  // the path and query on that approved HTTPS host.
-  const safeTarget = new URL(`https://${allowedHost}`);
-  safeTarget.pathname = target.pathname;
-  safeTarget.search = target.search;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const response = await fetchPublicJson(target, controller.signal);
 
-    const response = await fetch(safeTarget.toString(), {
-      cache: 'no-store',
-      redirect: 'error',
-      signal: controller.signal,
-      headers: {
-        'user-agent': 'api-response-comparator/1.0',
-      },
-    });
-
-    clearTimeout(timeoutId);
-
-    const body = await response.text();
-
-    if (body.length > MAX_RESPONSE_SIZE) {
-      return NextResponse.json(
-        { error: 'Response too large' },
-        { status: 413 },
-      );
+    if (response.body.length > MAX_RESPONSE_SIZE) {
+      return NextResponse.json({ error: 'Response too large' }, { status: 413 });
     }
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: `Remote request failed: ${response.status} ${response.statusText}`, body },
+        {
+          error: `Remote request failed: ${response.status} ${response.statusText}`,
+          body: response.body,
+        },
         { status: 502 },
       );
     }
 
-    return new NextResponse(body, {
+    return new NextResponse(response.body, {
       status: 200,
       headers: {
         'content-type': 'text/plain; charset=utf-8',
@@ -197,16 +202,12 @@ export async function GET(request: Request) {
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json(
-        { error: 'Request timeout' },
-        { status: 504 },
-      );
+      return NextResponse.json({ error: 'Request timeout' }, { status: 504 });
     }
 
     const message = error instanceof Error ? error.message : 'Unknown fetch error';
-    return NextResponse.json(
-      { error: `Unable to fetch URL: ${message}` },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: `Unable to fetch URL: ${message}` }, { status: 502 });
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

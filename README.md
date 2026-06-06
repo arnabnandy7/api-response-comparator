@@ -47,13 +47,6 @@ Install dependencies:
 npm install
 ```
 
-Create `.env.local` from `.env.example` and list each remote API hostname the
-server may contact:
-
-```bash
-ALLOWED_PROXY_HOSTS=www.elevation-api.eu,api.example.com
-```
-
 Start the development server:
 
 ```bash
@@ -71,8 +64,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 5. Copy the diff JSON or download an Excel report.
 
 Remote URLs are fetched server-side through `/api/proxy`, which helps avoid
-browser CORS restrictions for external JSON endpoints. For SSRF protection,
-only HTTPS URLs on hosts listed in `ALLOWED_PROXY_HOSTS` are accepted.
+browser CORS restrictions for external JSON endpoints. The proxy accepts
+arbitrary HTTPS hostnames, rejects local and non-public network destinations,
+pins each connection to its validated DNS result, and revalidates redirects.
 
 ## Scripts
 
