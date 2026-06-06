@@ -231,6 +231,66 @@ describe('Home', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a color-coded JSON tree and filters its highlighted changes', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste(JSON.stringify({
+      user: {
+        name: 'Arnab',
+        removed: 'old',
+      },
+      typed: 1,
+    }));
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste(JSON.stringify({
+      user: {
+        name: 'Nandy',
+        added: 'new',
+      },
+      typed: '1',
+    }));
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.click(screen.getByRole('button', { name: 'Tree' }));
+
+    expect(
+      screen.queryByRole('table', { name: 'Differences' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'JSON A Tree' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'JSON B Tree' })).toBeInTheDocument();
+
+    expect(screen.getByLabelText('JSON A path user.name CHANGED')).toHaveClass(
+      'bg-amber-100',
+    );
+    expect(screen.getByLabelText('JSON B path user.name CHANGED')).toHaveClass(
+      'bg-amber-100',
+    );
+    expect(screen.getByLabelText('JSON A path user.removed REMOVED')).toHaveClass(
+      'bg-red-100',
+    );
+    expect(screen.getByLabelText('JSON B path user.added ADDED')).toHaveClass(
+      'bg-green-100',
+    );
+    expect(screen.getByLabelText('JSON A path typed TYPE_CHANGE')).toHaveClass(
+      'bg-purple-100',
+    );
+    expect(screen.getByLabelText('JSON B path typed TYPE_CHANGE')).toHaveClass(
+      'bg-purple-100',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Added: 1' }));
+
+    expect(screen.getByLabelText('JSON B path user.added ADDED')).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('JSON A path user.removed REMOVED'),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Table' }));
+
+    expect(screen.getByRole('table', { name: 'Differences' })).toBeInTheDocument();
+  });
+
   it('shows the download Excel button alongside Copy Diff after compare', async () => {
     const user = userEvent.setup();
 
@@ -314,11 +374,20 @@ describe('Home', () => {
       const requestUrl = new URL(url, 'http://localhost');
       if (requestUrl.pathname === '/api/proxy') {
         const target = requestUrl.searchParams.get('url');
-        if (target === 'https://api.a.test') return Promise.resolve(respA as any);
-        if (target === 'https://api.b.test') return Promise.resolve(respB as any);
+        if (target === 'https://api.a.test') {
+          return Promise.resolve(respA as unknown as Response);
+        }
+        if (target === 'https://api.b.test') {
+          return Promise.resolve(respB as unknown as Response);
+        }
       }
 
-      return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found', text: async () => '' } as any);
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => '',
+      } as unknown as Response);
     }));
 
     render(<Home />);

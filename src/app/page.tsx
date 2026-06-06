@@ -11,6 +11,7 @@ import type { DiffEntry } from '@/src/types/diff';
 import { ThemeToggle } from '@/src/components/theme-toggle';
 
 type DiffFilter = 'ALL' | DiffEntry['type'];
+type ResultView = 'TABLE' | 'TREE';
 
 export default function Home() {
   const [jsonA, setJsonA] = useState('');
@@ -20,6 +21,9 @@ export default function Home() {
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('ALL');
   const [pathSearch, setPathSearch] = useState('');
+  const [resultView, setResultView] = useState<ResultView>('TABLE');
+  const [comparedJsonA, setComparedJsonA] = useState<unknown>();
+  const [comparedJsonB, setComparedJsonB] = useState<unknown>();
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -38,6 +42,9 @@ export default function Home() {
     setDiffs([]);
     setDiffFilter('ALL');
     setPathSearch('');
+    setResultView('TABLE');
+    setComparedJsonA(undefined);
+    setComparedJsonB(undefined);
     setError('');
     setHasCompared(false);
   };
@@ -94,7 +101,7 @@ export default function Home() {
       return { width: Math.min(maxChars + 4, 60) };
     });
 
-    sheet.columns = cols as any;
+    sheet.columns = cols;
 
     // add header row with styling
     const headerRow = sheet.addRow(rows[0]);
@@ -104,9 +111,13 @@ export default function Home() {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FF0070C0' },
-      } as any;
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } } as any;
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true } as any;
+      };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+        wrapText: true,
+      };
     });
 
     // add data rows
@@ -147,6 +158,7 @@ export default function Home() {
     setHasCompared(true);
     setDiffFilter('ALL');
     setPathSearch('');
+    setResultView('TABLE');
 
     const parsedJsonA = parseJson(jsonA);
 
@@ -169,6 +181,8 @@ export default function Home() {
       .map((key) => key.trim())
       .filter(Boolean);
 
+    setComparedJsonA(parsedJsonA.value);
+    setComparedJsonB(parsedJsonB.value);
     setDiffs(compareJson(parsedJsonA.value, parsedJsonB.value, ignoreKeys));
   };
 
@@ -271,6 +285,7 @@ export default function Home() {
     setHasCompared(true);
     setDiffFilter('ALL');
     setPathSearch('');
+    setResultView('TABLE');
 
     try {
       const [textA, textB] = await Promise.all([
@@ -294,13 +309,17 @@ export default function Home() {
 
       setJsonA(JSON.stringify(parsedA, null, 2));
       setJsonB(JSON.stringify(parsedB, null, 2));
+      setComparedJsonA(parsedA);
+      setComparedJsonB(parsedB);
       resetIgnoreRules();
       setDiffs(compareJson(parsedA, parsedB));
       showToast('Fetched and compared responses');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setDiffs([]);
-      setError(err?.message || 'Failed to fetch and compare URLs');
+      setError(
+        err instanceof Error ? err.message : 'Failed to fetch and compare URLs',
+      );
     } finally {
       setIsFetching(false);
     }
@@ -727,6 +746,36 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <div
+                      className="flex rounded border border-gray-300 p-0.5 dark:border-zinc-600"
+                      role="group"
+                      aria-label="Result view"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setResultView('TABLE')}
+                        aria-pressed={resultView === 'TABLE'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          resultView === 'TABLE'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-zinc-700'
+                        }`}
+                      >
+                        Table
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResultView('TREE')}
+                        aria-pressed={resultView === 'TREE'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          resultView === 'TREE'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-zinc-700'
+                        }`}
+                      >
+                        Tree
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={handleCopyDiff}
@@ -854,18 +903,33 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                <DiffTable
-                  diffs={diffs.filter((diff) => {
-                    const matchesType =
-                      diffFilter === 'ALL' || diff.type === diffFilter;
-                    const query = pathSearch.trim().toLowerCase();
-                    const matchesPath =
-                      !query || diff.path.toLowerCase().includes(query);
-                    return matchesType && matchesPath;
-                  })}
-                  hasCompared={hasCompared}
-                  isFiltered={diffFilter !== 'ALL' || Boolean(pathSearch.trim())}
-                />
+                {resultView === 'TABLE' ? (
+                  <DiffTable
+                    diffs={diffs.filter((diff) => {
+                      const matchesType =
+                        diffFilter === 'ALL' || diff.type === diffFilter;
+                      const query = pathSearch.trim().toLowerCase();
+                      const matchesPath =
+                        !query || diff.path.toLowerCase().includes(query);
+                      return matchesType && matchesPath;
+                    })}
+                    hasCompared={hasCompared}
+                    isFiltered={diffFilter !== 'ALL' || Boolean(pathSearch.trim())}
+                  />
+                ) : (
+                  <JsonTreeComparison
+                    jsonA={comparedJsonA}
+                    jsonB={comparedJsonB}
+                    highlightedDiffs={diffs.filter((diff) => {
+                      const matchesType =
+                        diffFilter === 'ALL' || diff.type === diffFilter;
+                      const query = pathSearch.trim().toLowerCase();
+                      const matchesPath =
+                        !query || diff.path.toLowerCase().includes(query);
+                      return matchesType && matchesPath;
+                    })}
+                  />
+                )}
               </div>
             )}
           </section>
@@ -896,6 +960,193 @@ export default function Home() {
       </footer>
     </div>
   );
+}
+
+function JsonTreeComparison({
+  jsonA,
+  jsonB,
+  highlightedDiffs,
+}: {
+  jsonA: unknown;
+  jsonB: unknown;
+  highlightedDiffs: DiffEntry[];
+}) {
+  const diffByPath = new Map(
+    highlightedDiffs.map((diff) => [diff.path, diff]),
+  );
+
+  return (
+    <div
+      className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+      aria-label="JSON tree comparison"
+    >
+      <JsonTreePanel
+        title="JSON A Tree"
+        value={jsonA}
+        side="A"
+        diffByPath={diffByPath}
+      />
+      <JsonTreePanel
+        title="JSON B Tree"
+        value={jsonB}
+        side="B"
+        diffByPath={diffByPath}
+      />
+    </div>
+  );
+}
+
+function JsonTreePanel({
+  title,
+  value,
+  side,
+  diffByPath,
+}: {
+  title: string;
+  value: unknown;
+  side: 'A' | 'B';
+  diffByPath: Map<string, DiffEntry>;
+}) {
+  return (
+    <section
+      aria-label={title}
+      className="min-w-0 rounded-lg border border-gray-300 bg-white dark:border-zinc-700 dark:bg-zinc-800"
+    >
+      <h3 className="border-b border-gray-200 px-4 py-3 font-semibold text-gray-900 dark:border-zinc-700 dark:text-white">
+        {title}
+      </h3>
+      <div className="max-h-[36rem] overflow-auto p-4 font-mono text-sm">
+        <JsonTreeNode
+          value={value}
+          path=""
+          label="(root)"
+          side={side}
+          diffByPath={diffByPath}
+          depth={0}
+        />
+      </div>
+    </section>
+  );
+}
+
+function JsonTreeNode({
+  value,
+  path,
+  label,
+  side,
+  diffByPath,
+  depth,
+}: {
+  value: unknown;
+  path: string;
+  label: string;
+  side: 'A' | 'B';
+  diffByPath: Map<string, DiffEntry>;
+  depth: number;
+}) {
+  const diff = diffByPath.get(path);
+  const highlightClass = getTreeHighlightClassName(diff, side);
+  const ariaLabel = diff
+    ? `${side === 'A' ? 'JSON A' : 'JSON B'} path ${path || '(root)'} ${diff.type}`
+    : undefined;
+
+  if (Array.isArray(value)) {
+    return (
+      <details open style={{ marginLeft: depth * 12 }}>
+        <summary
+          aria-label={ariaLabel}
+          className={`cursor-pointer rounded px-1 py-0.5 text-gray-900 dark:text-gray-100 ${highlightClass}`}
+        >
+          <span className="font-semibold">{label}</span>
+          <span className="text-gray-500 dark:text-gray-400"> [{value.length}]</span>
+        </summary>
+        {value.map((item, index) => (
+          <JsonTreeNode
+            key={`${path}-${index}`}
+            value={item}
+            path={`${path}[${index}]`}
+            label={`[${index}]`}
+            side={side}
+            diffByPath={diffByPath}
+            depth={depth + 1}
+          />
+        ))}
+      </details>
+    );
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    return (
+      <details open style={{ marginLeft: depth * 12 }}>
+        <summary
+          aria-label={ariaLabel}
+          className={`cursor-pointer rounded px-1 py-0.5 text-gray-900 dark:text-gray-100 ${highlightClass}`}
+        >
+          <span className="font-semibold">{label}</span>
+          <span className="text-gray-500 dark:text-gray-400"> {'{' + entries.length + '}'}</span>
+        </summary>
+        {entries.map(([key, childValue]) => (
+          <JsonTreeNode
+            key={`${path}-${key}`}
+            value={childValue}
+            path={path ? `${path}.${key}` : key}
+            label={key}
+            side={side}
+            diffByPath={diffByPath}
+            depth={depth + 1}
+          />
+        ))}
+      </details>
+    );
+  }
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      style={{ marginLeft: depth * 12 }}
+      className={`rounded px-1 py-0.5 text-gray-900 dark:text-gray-100 ${highlightClass}`}
+    >
+      <span className="font-semibold">{label}</span>
+      <span className="text-gray-500 dark:text-gray-400">: </span>
+      <span>{formatTreeValue(value)}</span>
+    </div>
+  );
+}
+
+function formatTreeValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function getTreeHighlightClassName(
+  diff: DiffEntry | undefined,
+  side: 'A' | 'B',
+): string {
+  if (!diff) {
+    return '';
+  }
+
+  if (diff.type === 'ADDED') {
+    return side === 'B'
+      ? 'bg-green-100 text-green-900 ring-1 ring-green-300 dark:bg-green-950 dark:text-green-200 dark:ring-green-800'
+      : '';
+  }
+
+  if (diff.type === 'REMOVED') {
+    return side === 'A'
+      ? 'bg-red-100 text-red-900 ring-1 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800'
+      : '';
+  }
+
+  if (diff.type === 'TYPE_CHANGE') {
+    return 'bg-purple-100 text-purple-900 ring-1 ring-purple-300 dark:bg-purple-950 dark:text-purple-200 dark:ring-purple-800';
+  }
+
+  return 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800';
 }
 
 function DiffTable({
