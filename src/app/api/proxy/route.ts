@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 
+const ALLOWED_PROXY_HOSTNAMES = new Set([
+  'example.com',
+  'api.example.com',
+]);
+
 export async function GET(request: Request) {
   const requestUrl =
     'nextUrl' in request && request.nextUrl
@@ -29,6 +34,13 @@ export async function GET(request: Request) {
   if (!['http:', 'https:'].includes(target.protocol)) {
     return NextResponse.json(
       { error: 'Only http and https URLs are supported' },
+      { status: 400 },
+    );
+  }
+
+  if (!ALLOWED_PROXY_HOSTNAMES.has(target.hostname)) {
+    return NextResponse.json(
+      { error: 'URL hostname is not allowed' },
       { status: 400 },
     );
   }
