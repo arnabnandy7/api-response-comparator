@@ -3,15 +3,15 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 const PRIVATE_IPV6_PREFIXES = ['::1', 'fc00', 'fd00', 'fe80'];
-const ALLOWED_PROXY_HOSTS = new Set(
-  (process.env.ALLOWED_PROXY_HOSTS ?? '')
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean),
-);
-
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_RESPONSE_SIZE = 50 * 1024 * 1024; // 50MB
+
+function getAllowedProxyHosts() {
+  return (process.env.ALLOWED_PROXY_HOSTS ?? '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 function isPrivateIpv4(address: string) {
   const parts = address.split('.').map((part) => Number(part));
@@ -43,16 +43,17 @@ function isPrivateIpAddress(address: string) {
   return false;
 }
 
-async function validateHostResolution(hostname: string): Promise<string> {
+async function validateHostResolution(hostname: string): Promise<void> {
   try {
-    const result = await lookup(hostname);
-    const resolvedIp = result.address;
+    const results = await lookup(hostname, { all: true });
 
-    if (isPrivateIpAddress(resolvedIp)) {
-      throw new Error('Resolved IP is in private range');
+    if (results.length === 0) {
+      throw new Error('Hostname did not resolve to an IP address');
     }
 
-    return resolvedIp;
+    if (results.some(({ address }) => isPrivateIpAddress(address))) {
+      throw new Error('Resolved IP is in private range');
+    }
   } catch (error) {
     throw new Error(
       `Failed to resolve hostname: ${error instanceof Error ? error.message : 'unknown error'}`,
@@ -82,9 +83,9 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!['http:', 'https:'].includes(target.protocol)) {
+  if (target.protocol !== 'https:') {
     return NextResponse.json(
-      { error: 'Only http and https URLs are supported' },
+      { error: 'Only https URLs are supported' },
       { status: 400 },
     );
   }
@@ -92,6 +93,13 @@ export async function GET(request: Request) {
   if (target.username || target.password) {
     return NextResponse.json(
       { error: 'URL credentials are not supported' },
+      { status: 400 },
+    );
+  }
+
+  if (target.port) {
+    return NextResponse.json(
+      { error: 'Custom ports are not supported' },
       { status: 400 },
     );
   }
@@ -118,10 +126,16 @@ export async function GET(request: Request) {
   }
 
   const normalizedHost = target.hostname.toLowerCase();
-  if (ALLOWED_PROXY_HOSTS.size > 0 && !ALLOWED_PROXY_HOSTS.has(normalizedHost)) {
+  const allowedHost = getAllowedProxyHosts().find((host) => host === normalizedHost);
+
+  if (!allowedHost) {
     return NextResponse.json(
-      { error: 'Target host is not allowed' },
-      { status: 400 },
+      {
+        error: process.env.ALLOWED_PROXY_HOSTS
+          ? 'Target host is not allowed'
+          : 'Proxy host allowlist is not configured',
+      },
+      { status: process.env.ALLOWED_PROXY_HOSTS ? 400 : 503 },
     );
   }
 
@@ -137,13 +151,11 @@ export async function GET(request: Request) {
     );
   }
 
-  const safeTarget = new URL(`${target.protocol}//${normalizedHost}`);
-  if (target.port) {
-    safeTarget.port = target.port;
-  }
+  // The origin is selected from server configuration; user input only supplies
+  // the path and query on that approved HTTPS host.
+  const safeTarget = new URL(`https://${allowedHost}`);
   safeTarget.pathname = target.pathname;
   safeTarget.search = target.search;
-  safeTarget.hash = target.hash;
 
   try {
     const controller = new AbortController();
