@@ -2,6 +2,11 @@
 
 import { useState, type ChangeEvent } from 'react';
 import { compareJson } from '@/src/lib/compare';
+import {
+  generateIgnoreSuggestions,
+  getIgnoreFieldFromPath,
+  type IgnoreSuggestion,
+} from '@/src/lib/ignore-rules';
 import type { DiffEntry } from '@/src/types/diff';
 import { ThemeToggle } from '@/src/components/theme-toggle';
 
@@ -16,7 +21,20 @@ export default function Home() {
   const [isFetching, setIsFetching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [ignoreFields, setIgnoreFields] = useState('');
+  const [ignoreSuggestions, setIgnoreSuggestions] = useState<IgnoreSuggestion[]>([]);
   const [toastMessage, setToastMessage] = useState('');
+
+  const resetIgnoreRules = () => {
+    setIgnoreFields('');
+    setIgnoreSuggestions([]);
+  };
+
+  const resetSourceDerivedState = () => {
+    resetIgnoreRules();
+    setDiffs([]);
+    setError('');
+    setHasCompared(false);
+  };
 
   const handleCopyDiff = () => {
     const textToCopy = JSON.stringify(diffs, null, 2);
@@ -131,7 +149,11 @@ export default function Home() {
 
     if (jsonA.trim()) {
       try {
-        setJsonA(JSON.stringify(JSON.parse(jsonA), null, 2));
+        const formattedJsonA = JSON.stringify(JSON.parse(jsonA), null, 2);
+        if (formattedJsonA !== jsonA) {
+          resetSourceDerivedState();
+          setJsonA(formattedJsonA);
+        }
       } catch {
         newError += 'Invalid JSON in Response A. ';
         hasError = true;
@@ -140,7 +162,11 @@ export default function Home() {
 
     if (jsonB.trim()) {
       try {
-        setJsonB(JSON.stringify(JSON.parse(jsonB), null, 2));
+        const formattedJsonB = JSON.stringify(JSON.parse(jsonB), null, 2);
+        if (formattedJsonB !== jsonB) {
+          resetSourceDerivedState();
+          setJsonB(formattedJsonB);
+        }
       } catch {
         newError += 'Invalid JSON in Response B.';
         hasError = true;
@@ -152,6 +178,47 @@ export default function Home() {
     } else {
       setError('');
     }
+  };
+
+  const handleGenerateIgnoreRules = () => {
+    setError('');
+
+    const parsedJsonA = parseJson(jsonA);
+    if (!parsedJsonA.ok) {
+      setIgnoreSuggestions([]);
+      setError('Invalid JSON in Response A');
+      return;
+    }
+
+    const parsedJsonB = parseJson(jsonB);
+    if (!parsedJsonB.ok) {
+      setIgnoreSuggestions([]);
+      setError('Invalid JSON in Response B');
+      return;
+    }
+
+    const suggestions = generateIgnoreSuggestions(
+      compareJson(parsedJsonA.value, parsedJsonB.value),
+    );
+    setIgnoreSuggestions(suggestions);
+
+    const generatedRules = suggestions
+      .map((suggestion) => getIgnoreFieldFromPath(suggestion.path))
+      .filter((field): field is string => Boolean(field));
+
+    if (generatedRules.length === 0) {
+      showToast('No high-volatility fields detected');
+      return;
+    }
+
+    const existingRules = ignoreFields
+      .split(',')
+      .map((key) => key.trim())
+      .filter(Boolean);
+    const mergedRules = Array.from(new Set([...existingRules, ...generatedRules]));
+
+    setIgnoreFields(mergedRules.join(', '));
+    showToast(`Generated ${generatedRules.length} ignore rule${generatedRules.length === 1 ? '' : 's'}`);
   };
 
   const getProxyUrl = (target: string) =>
@@ -196,13 +263,8 @@ export default function Home() {
 
       setJsonA(JSON.stringify(parsedA, null, 2));
       setJsonB(JSON.stringify(parsedB, null, 2));
-
-      const ignoreKeys = ignoreFields
-        .split(',')
-        .map((key) => key.trim())
-        .filter(Boolean);
-
-      setDiffs(compareJson(parsedA, parsedB, ignoreKeys));
+      resetIgnoreRules();
+      setDiffs(compareJson(parsedA, parsedB));
       showToast('Fetched and compared responses');
     } catch (err: any) {
       console.error(err);
@@ -220,6 +282,7 @@ export default function Home() {
     try {
       const fileText = await file.text();
       JSON.parse(fileText);
+      resetSourceDerivedState();
       setJsonA(fileText);
       setError('');
       showToast(`Loaded ${file.name}`);
@@ -235,6 +298,7 @@ export default function Home() {
     try {
       const fileText = await file.text();
       JSON.parse(fileText);
+      resetSourceDerivedState();
       setJsonB(fileText);
       setError('');
       showToast(`Loaded ${file.name}`);
@@ -249,10 +313,12 @@ export default function Home() {
   };
 
   const clearJsonA = () => {
+    resetSourceDerivedState();
     setJsonA('');
   };
 
   const clearJsonB = () => {
+    resetSourceDerivedState();
     setJsonB('');
   };
 
@@ -320,7 +386,10 @@ export default function Home() {
               <textarea
                 id="json-a"
                 value={jsonA}
-                onChange={(e) => setJsonA(e.target.value)}
+                onChange={(e) => {
+                  resetSourceDerivedState();
+                  setJsonA(e.target.value);
+                }}
                 placeholder="Paste JSON response here..."
                 className="min-h-80 w-full flex-1 p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-sm"
               />
@@ -372,7 +441,10 @@ export default function Home() {
               <textarea
                 id="json-b"
                 value={jsonB}
-                onChange={(e) => setJsonB(e.target.value)}
+                onChange={(e) => {
+                  resetSourceDerivedState();
+                  setJsonB(e.target.value);
+                }}
                 placeholder="Paste JSON response here..."
                 className="min-h-80 w-full flex-1 p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-sm"
               />
@@ -387,12 +459,22 @@ export default function Home() {
             </div>
           </div>
           <div className="flex flex-col md:col-span-2">
-            <label
-              htmlFor="ignore-fields"
-              className="text-lg font-semibold text-gray-900 dark:text-white mb-2"
-            >
-              Ignore fields
-            </label>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="ignore-fields"
+                className="text-lg font-semibold text-gray-900 dark:text-white"
+              >
+                Ignore fields
+              </label>
+              <button
+                type="button"
+                onClick={handleGenerateIgnoreRules}
+                disabled={!jsonA.trim() || !jsonB.trim()}
+                className="rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-950 dark:disabled:border-zinc-700 dark:disabled:text-zinc-600"
+              >
+                Generate Ignore Rules
+              </button>
+            </div>
             <input
               id="ignore-fields"
               value={ignoreFields}
@@ -400,6 +482,29 @@ export default function Home() {
               placeholder="creatUserId, otherField"
               className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
+            {ignoreSuggestions.length > 0 && (
+              <div
+                className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-900 dark:bg-blue-950/40"
+                aria-label="Generated ignore suggestions"
+              >
+                <p className="mb-2 font-semibold text-blue-900 dark:text-blue-200">
+                  Suggested volatile fields
+                </p>
+                <ul className="space-y-2">
+                  {ignoreSuggestions.map((suggestion) => (
+                    <li
+                      key={suggestion.path}
+                      className="text-slate-700 dark:text-slate-300"
+                    >
+                      <span className="font-mono font-semibold">{suggestion.path}</span>
+                      {' — '}
+                      <span>{suggestion.confidence} confidence</span>
+                      {` (${suggestion.score}): ${suggestion.reason}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 

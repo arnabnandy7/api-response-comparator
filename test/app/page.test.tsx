@@ -176,6 +176,115 @@ describe('Home', () => {
     expect(screen.queryByRole('button', { name: 'Clear API URL B' })).not.toBeInTheDocument();
   });
 
+  it('generates and merges ignore rules for volatile fields', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste(JSON.stringify({
+      stable: 'same',
+      updatedAt: '2026-06-06T10:00:00Z',
+      requestId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    }));
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste(JSON.stringify({
+      stable: 'same',
+      updatedAt: '2026-06-06T10:01:00Z',
+      requestId: '9b2de3a0-42f5-4c6f-9227-701f2a662c52',
+    }));
+    await user.type(screen.getByLabelText('Ignore fields'), 'existingField');
+
+    await user.click(screen.getByRole('button', { name: 'Generate Ignore Rules' }));
+
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue(
+      'existingField, requestId, updatedAt',
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Generated 2 ignore rules');
+    const suggestions = screen.getByLabelText('Generated ignore suggestions');
+    expect(within(suggestions).getByText('requestId')).toBeInTheDocument();
+    expect(within(suggestions).getByText('updatedAt')).toBeInTheDocument();
+    expect(within(suggestions).getAllByText('High confidence')).toHaveLength(2);
+  });
+
+  it('clears ignore fields and suggestions when either source JSON changes', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const jsonA = screen.getByLabelText('JSON A');
+    const jsonB = screen.getByLabelText('JSON B');
+
+    await user.click(jsonA);
+    await user.paste(JSON.stringify({
+      updatedAt: '2026-06-06T10:00:00Z',
+    }));
+    await user.click(jsonB);
+    await user.paste(JSON.stringify({
+      updatedAt: '2026-06-06T10:01:00Z',
+    }));
+    await user.click(screen.getByRole('button', { name: 'Generate Ignore Rules' }));
+
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('updatedAt');
+    expect(screen.getByLabelText('Generated ignore suggestions')).toBeInTheDocument();
+
+    await user.type(jsonA, ' ');
+
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('');
+    expect(
+      screen.queryByLabelText('Generated ignore suggestions'),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Ignore fields'), 'manualRule');
+    await user.type(jsonB, ' ');
+
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('');
+  });
+
+  it('hides stale results when either source JSON changes', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const jsonA = screen.getByLabelText('JSON A');
+    const jsonB = screen.getByLabelText('JSON B');
+
+    await user.click(jsonA);
+    await user.paste('{"value":1}');
+    await user.click(jsonB);
+    await user.paste('{"value":2}');
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+
+    expect(screen.getByRole('heading', { name: 'Results' })).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
+
+    await user.type(jsonA, ' ');
+
+    expect(screen.queryByRole('heading', { name: 'Results' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    await user.clear(jsonA);
+    await user.click(jsonA);
+    await user.paste('{"value":1}');
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    expect(screen.getByRole('heading', { name: 'Results' })).toBeInTheDocument();
+
+    await user.type(jsonB, ' ');
+
+    expect(screen.queryByRole('heading', { name: 'Results' })).not.toBeInTheDocument();
+  });
+
+  it('validates JSON before generating ignore rules', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste('{bad json');
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste('{"ok":true}');
+    await user.click(screen.getByRole('button', { name: 'Generate Ignore Rules' }));
+
+    expect(screen.getByText('Invalid JSON in Response A')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('');
+  });
+
   it('shows a response A validation error for invalid JSON', async () => {
     const user = userEvent.setup();
 
