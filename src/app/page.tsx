@@ -19,6 +19,7 @@ export default function Home() {
   const [urlB, setUrlB] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('ALL');
+  const [pathSearch, setPathSearch] = useState('');
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -36,6 +37,7 @@ export default function Home() {
     resetIgnoreRules();
     setDiffs([]);
     setDiffFilter('ALL');
+    setPathSearch('');
     setError('');
     setHasCompared(false);
   };
@@ -144,6 +146,7 @@ export default function Home() {
     setError('');
     setHasCompared(true);
     setDiffFilter('ALL');
+    setPathSearch('');
 
     const parsedJsonA = parseJson(jsonA);
 
@@ -267,6 +270,7 @@ export default function Home() {
     setIsFetching(true);
     setHasCompared(true);
     setDiffFilter('ALL');
+    setPathSearch('');
 
     try {
       const [textA, textB] = await Promise.all([
@@ -614,8 +618,8 @@ export default function Home() {
                 Results
               </h2>
               {hasCompared && !error && (
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className="font-semibold text-gray-700 dark:text-gray-300">
                       Filter results
                     </span>
@@ -684,6 +688,42 @@ export default function Home() {
                       >
                         Type changes: {diffs.filter((d) => d.type === 'TYPE_CHANGE').length}
                       </button>
+                    </div>
+                    <div className="relative">
+                      <label htmlFor="path-search" className="sr-only">
+                        Search differences by path
+                      </label>
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                      <input
+                        id="path-search"
+                        type="search"
+                        value={pathSearch}
+                        onChange={(event) => setPathSearch(event.target.value)}
+                        placeholder="Search path..."
+                        className="h-8 w-44 rounded border border-gray-300 bg-white py-1 pl-8 pr-8 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder:text-gray-400"
+                      />
+                      {pathSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setPathSearch('')}
+                          aria-label="Clear path search"
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-400 dark:hover:bg-zinc-700 dark:hover:text-white"
+                        >
+                          <span aria-hidden="true">&times;</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -815,13 +855,16 @@ export default function Home() {
                     </div>
                   )}
                 <DiffTable
-                  diffs={
-                    diffFilter === 'ALL'
-                      ? diffs
-                      : diffs.filter((diff) => diff.type === diffFilter)
-                  }
+                  diffs={diffs.filter((diff) => {
+                    const matchesType =
+                      diffFilter === 'ALL' || diff.type === diffFilter;
+                    const query = pathSearch.trim().toLowerCase();
+                    const matchesPath =
+                      !query || diff.path.toLowerCase().includes(query);
+                    return matchesType && matchesPath;
+                  })}
                   hasCompared={hasCompared}
-                  isFiltered={diffFilter !== 'ALL'}
+                  isFiltered={diffFilter !== 'ALL' || Boolean(pathSearch.trim())}
                 />
               </div>
             )}

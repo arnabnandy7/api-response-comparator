@@ -184,6 +184,53 @@ describe('Home', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(5);
   });
 
+  it('searches differences by path and combines with type filters', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste(JSON.stringify({
+      users: [{ name: 'Arnab', age: 30 }],
+      orders: [{ amount: 100, status: 'new' }],
+    }));
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste(JSON.stringify({
+      users: [{ name: 'Nandy', age: 31 }],
+      orders: [{ amount: '100', status: 'paid' }],
+    }));
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+
+    const table = screen.getByRole('table', { name: 'Differences' });
+    const search = screen.getByRole('searchbox', {
+      name: 'Search differences by path',
+    });
+
+    await user.type(search, 'USERS');
+    expect(within(table).getByText('users[0].name')).toBeInTheDocument();
+    expect(within(table).getByText('users[0].age')).toBeInTheDocument();
+    expect(within(table).queryByText('orders[0].amount')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Type changes: 1' }));
+    expect(
+      screen.getByText('No differences match the selected filter.'),
+    ).toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, 'orders');
+    expect(screen.getByRole('table', { name: 'Differences' })).toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Differences' })).getByText(
+      'orders[0].amount',
+    )).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear path search' }));
+    expect(search).toHaveValue('');
+    expect(
+      within(screen.getByRole('table', { name: 'Differences' })).getByText(
+        'orders[0].amount',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('shows the download Excel button alongside Copy Diff after compare', async () => {
     const user = userEvent.setup();
 
