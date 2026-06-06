@@ -8,9 +8,12 @@ import { ThemeToggle } from '@/src/components/theme-toggle';
 export default function Home() {
   const [jsonA, setJsonA] = useState('');
   const [jsonB, setJsonB] = useState('');
+  const [urlA, setUrlA] = useState('');
+  const [urlB, setUrlB] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [ignoreFields, setIgnoreFields] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -148,6 +151,60 @@ export default function Home() {
       setError(newError.trim());
     } else {
       setError('');
+    }
+  };
+
+  const handleFetchAndCompare = async () => {
+    setError('');
+    setIsFetching(true);
+    setHasCompared(true);
+
+    try {
+      const [respA, respB] = await Promise.all([
+        fetch(urlA, { cache: 'no-store' }),
+        fetch(urlB, { cache: 'no-store' }),
+      ]);
+
+      if (!respA.ok) {
+        throw new Error(`Failed to fetch A: ${respA.status} ${respA.statusText}`);
+      }
+      if (!respB.ok) {
+        throw new Error(`Failed to fetch B: ${respB.status} ${respB.statusText}`);
+      }
+
+      const [textA, textB] = await Promise.all([respA.text(), respB.text()]);
+
+      // Try to parse to validate JSON; if parse fails, surface error
+      let parsedA: unknown;
+      let parsedB: unknown;
+      try {
+        parsedA = JSON.parse(textA);
+      } catch (e) {
+        throw new Error('Response A is not valid JSON');
+      }
+      try {
+        parsedB = JSON.parse(textB);
+      } catch (e) {
+        throw new Error('Response B is not valid JSON');
+      }
+
+      // update textareas with pretty JSON for inspection
+      setJsonA(JSON.stringify(parsedA, null, 2));
+      setJsonB(JSON.stringify(parsedB, null, 2));
+
+      const ignoreKeys = ignoreFields
+        .split(',')
+        .map((key) => key.trim())
+        .filter(Boolean);
+
+      setDiffs(compareJson(parsedA, parsedB, ignoreKeys));
+      showToast('Fetched and compared responses');
+    } catch (err: any) {
+      console.error(err);
+      setDiffs([]);
+      setError(err?.message || 'Failed to fetch and compare URLs');
+    } finally {
+      setIsFetching(false);
     }
   };
 
@@ -342,6 +399,25 @@ export default function Home() {
         </div>
 
         {/* Action Buttons */}
+        {/* Optional URL fetcher */}
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              id="url-a"
+              value={urlA}
+              onChange={(e) => setUrlA(e.target.value)}
+              placeholder="API URL A (optional)"
+              className="p-3 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+            <input
+              id="url-b"
+              value={urlB}
+              onChange={(e) => setUrlB(e.target.value)}
+              placeholder="API URL B (optional)"
+              className="p-3 border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+        </div>
         <div className="flex justify-center gap-4 mb-8">
           <button
             onClick={handleFormatBoth}
@@ -356,6 +432,13 @@ export default function Home() {
             disabled={!jsonA.trim() || !jsonB.trim()}
           >
             Compare
+          </button>
+          <button
+            onClick={handleFetchAndCompare}
+            className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
+            disabled={!urlA.trim() || !urlB.trim() || isFetching}
+          >
+            {isFetching ? 'Fetching…' : 'Fetch & Compare'}
           </button>
         </div>
 
