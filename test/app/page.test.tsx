@@ -36,6 +36,20 @@ afterEach(() => {
 });
 
 describe('Home', () => {
+  it('shows copyright and the developer repository link', () => {
+    render(<Home />);
+
+    expect(
+      screen.getByText(`${new Date().getFullYear()} API Response Comparator`, {
+        exact: false,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Contact developer' })).toHaveAttribute(
+      'href',
+      'https://github.com/arnabnandy7/api-response-comparator',
+    );
+  });
+
   it('parses, compares, and displays diff entries in a table', async () => {
     const user = userEvent.setup();
 
@@ -123,6 +137,51 @@ describe('Home', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Changed: 1')).toBeInTheDocument();
+  });
+
+  it('filters differences by type and restores all results', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('JSON A'));
+    await user.paste(JSON.stringify({
+      removed: true,
+      changed: 1,
+      typed: 1,
+    }));
+    await user.click(screen.getByLabelText('JSON B'));
+    await user.paste(JSON.stringify({
+      added: true,
+      changed: 2,
+      typed: '1',
+    }));
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+
+    const table = screen.getByRole('table', { name: 'Differences' });
+    expect(within(table).getAllByRole('row')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Show all: 4' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Added: 1' }));
+    expect(within(table).getByText('added')).toBeInTheDocument();
+    expect(within(table).queryByText('removed')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Removed: 1' }));
+    expect(within(table).getByText('removed')).toBeInTheDocument();
+    expect(within(table).queryByText('added')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Changed: 1' }));
+    expect(within(table).getByText('changed')).toBeInTheDocument();
+    expect(within(table).queryByText('typed')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Type changes: 1' }));
+    expect(within(table).getByText('typed')).toBeInTheDocument();
+    expect(within(table).queryByText('changed')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show all: 4' }));
+    expect(within(table).getAllByRole('row')).toHaveLength(5);
   });
 
   it('shows the download Excel button alongside Copy Diff after compare', async () => {

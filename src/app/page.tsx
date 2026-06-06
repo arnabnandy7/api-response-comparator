@@ -10,12 +10,15 @@ import {
 import type { DiffEntry } from '@/src/types/diff';
 import { ThemeToggle } from '@/src/components/theme-toggle';
 
+type DiffFilter = 'ALL' | DiffEntry['type'];
+
 export default function Home() {
   const [jsonA, setJsonA] = useState('');
   const [jsonB, setJsonB] = useState('');
   const [urlA, setUrlA] = useState('');
   const [urlB, setUrlB] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
+  const [diffFilter, setDiffFilter] = useState<DiffFilter>('ALL');
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -32,6 +35,7 @@ export default function Home() {
   const resetSourceDerivedState = () => {
     resetIgnoreRules();
     setDiffs([]);
+    setDiffFilter('ALL');
     setError('');
     setHasCompared(false);
   };
@@ -139,6 +143,7 @@ export default function Home() {
   const handleCompare = () => {
     setError('');
     setHasCompared(true);
+    setDiffFilter('ALL');
 
     const parsedJsonA = parseJson(jsonA);
 
@@ -261,6 +266,7 @@ export default function Home() {
     setError('');
     setIsFetching(true);
     setHasCompared(true);
+    setDiffFilter('ALL');
 
     try {
       const [textA, textB] = await Promise.all([
@@ -611,21 +617,73 @@ export default function Home() {
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-3">
                     <span className="font-semibold text-gray-700 dark:text-gray-300">
-                      Diff Counters
+                      Filter results
                     </span>
-                    <div className="flex gap-2">
-                      <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 rounded font-medium">
+                    <div
+                      className="flex flex-wrap gap-2"
+                      role="group"
+                      aria-label="Filter differences"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setDiffFilter('ALL')}
+                        aria-pressed={diffFilter === 'ALL'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          diffFilter === 'ALL'
+                            ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-700 dark:text-slate-200 dark:hover:bg-zinc-600'
+                        }`}
+                      >
+                        Show all: {diffs.length}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiffFilter('ADDED')}
+                        aria-pressed={diffFilter === 'ADDED'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          diffFilter === 'ADDED'
+                            ? 'bg-green-700 text-white dark:bg-green-400 dark:text-green-950'
+                            : 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900'
+                        }`}
+                      >
                         Added: {diffs.filter((d) => d.type === 'ADDED').length}
-                      </span>
-                      <span className="px-2 py-1 bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 rounded font-medium">
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiffFilter('REMOVED')}
+                        aria-pressed={diffFilter === 'REMOVED'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          diffFilter === 'REMOVED'
+                            ? 'bg-red-700 text-white dark:bg-red-400 dark:text-red-950'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900'
+                        }`}
+                      >
                         Removed: {diffs.filter((d) => d.type === 'REMOVED').length}
-                      </span>
-                      <span className="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded font-medium">
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiffFilter('CHANGED')}
+                        aria-pressed={diffFilter === 'CHANGED'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          diffFilter === 'CHANGED'
+                            ? 'bg-amber-600 text-white dark:bg-amber-400 dark:text-amber-950'
+                            : 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900'
+                        }`}
+                      >
                         Changed: {diffs.filter((d) => d.type === 'CHANGED').length}
-                      </span>
-                      <span className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded font-medium">
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiffFilter('TYPE_CHANGE')}
+                        aria-pressed={diffFilter === 'TYPE_CHANGE'}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          diffFilter === 'TYPE_CHANGE'
+                            ? 'bg-purple-700 text-white dark:bg-purple-400 dark:text-purple-950'
+                            : 'bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:hover:bg-purple-900'
+                        }`}
+                      >
                         Type changes: {diffs.filter((d) => d.type === 'TYPE_CHANGE').length}
-                      </span>
+                      </button>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -756,12 +814,43 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                <DiffTable diffs={diffs} hasCompared={hasCompared} />
+                <DiffTable
+                  diffs={
+                    diffFilter === 'ALL'
+                      ? diffs
+                      : diffs.filter((diff) => diff.type === diffFilter)
+                  }
+                  hasCompared={hasCompared}
+                  isFiltered={diffFilter !== 'ALL'}
+                />
               </div>
             )}
           </section>
         )}
       </main>
+      <footer className="border-t border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-sm text-gray-600 sm:flex-row dark:text-gray-300">
+          <p>
+            &copy; {new Date().getFullYear()} API Response Comparator
+          </p>
+          <a
+            href="https://github.com/arnabnandy7/api-response-comparator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 font-medium text-blue-700 no-underline transition hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:text-blue-300 dark:hover:text-blue-200 dark:focus:ring-offset-zinc-800"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="currentColor"
+            >
+              <path d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.3 3.6 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.6.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0C17.2 4.7 18.2 5 18.2 5c.6 1.5.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.8 5.5-5.5 5.8.5.4.9 1.1.9 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .7Z" />
+            </svg>
+            Contact developer
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -769,9 +858,11 @@ export default function Home() {
 function DiffTable({
   diffs,
   hasCompared,
+  isFiltered,
 }: {
   diffs: DiffEntry[];
   hasCompared: boolean;
+  isFiltered: boolean;
 }) {
   if (!hasCompared) {
     return (
@@ -787,7 +878,9 @@ function DiffTable({
     return (
       <div className="bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg p-6 min-h-64">
         <p className="text-gray-700 dark:text-gray-300">
-          No differences found.
+          {isFiltered
+            ? 'No differences match the selected filter.'
+            : 'No differences found.'}
         </p>
       </div>
     );
