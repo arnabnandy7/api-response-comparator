@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="API Response Comparator icon">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e" />
+      <stop offset="0.52" stop-color="#2563eb" />
+      <stop offset="1" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="panel" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96" />
+      <stop offset="1" stop-color="#dbeafe" stop-opacity="0.9" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)" />
+  <path d="M17 20c0-2.21 1.79-4 4-4h22c2.21 0 4 1.79 4 4v24c0 2.21-1.79 4-4 4H21c-2.21 0-4-1.79-4-4V20Z" fill="url(#panel)" />
+  <path d="M23 24h18M23 32h9M23 40h18" stroke="#0f172a" stroke-width="4" stroke-linecap="round" opacity="0.82" />
+  <path d="M40 28l5 4-5 4" fill="none" stroke="#0f766e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="47" cy="40" r="5" fill="#f97316" />
+  <path d="M45.1 40h3.8M47 38.1v3.8" stroke="#fff7ed" stroke-width="2" stroke-linecap="round" />
+</svg>
