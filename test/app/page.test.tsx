@@ -244,12 +244,27 @@ describe('Home', () => {
     await user.type(screen.getByLabelText('Dev API URL'), 'https://dev.test');
     await user.type(screen.getByLabelText('QA API URL'), 'https://qa.test');
     await user.type(screen.getByLabelText('Prod API URL'), 'https://prod.test');
+    await user.type(
+      screen.getByLabelText('Dev cURL'),
+      "curl 'https://curl-dev.test'",
+    );
+    await user.type(
+      screen.getByLabelText('QA cURL'),
+      "curl 'https://curl-qa.test'",
+    );
     await user.click(screen.getByRole('button', { name: 'Fetch & Compare' }));
 
     expect(screen.getByLabelText('Dev')).toHaveValue('{\n  "value": 1\n}');
     expect(screen.getByLabelText('QA')).toHaveValue('{\n  "value": 2\n}');
     expect(screen.getByLabelText('Prod')).toHaveValue('{\n  "value": 3\n}');
     expect(await screen.findByText('value')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      vi.mocked(fetch).mock.calls.every(
+        ([url, init]) =>
+          String(url).startsWith('/api/proxy?url=') && init?.method !== 'POST',
+      ),
+    ).toBe(true);
   });
 
   it('fetches and compares two URLs when the third is blank', async () => {
@@ -282,6 +297,89 @@ describe('Home', () => {
     expect(screen.getByLabelText('QA')).toHaveValue('{\n  "value": 2\n}');
     expect(screen.getByLabelText('Prod')).toHaveValue('{\n  "value": 3\n}');
     expect(await screen.findByText('value')).toBeInTheDocument();
+  });
+
+  it('imports cURL commands, executes them through the proxy, and compares', async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { url: string };
+      const value = request.url.includes('dev') ? 1 : 2;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => JSON.stringify({ value }),
+      } as Response);
+    }));
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('Dev cURL'));
+    await user.paste(
+      `curl 'https://dev.example.com/data' -H 'authorization: Bearer dev'`,
+    );
+    await user.click(screen.getByLabelText('QA cURL'));
+    await user.paste(
+      `curl 'https://qa.example.com/data' -X POST -H 'content-type: application/json' --data-raw '{"query":"test"}'`,
+    );
+    await user.type(screen.getByLabelText('Dev API URL'), 'https://url-dev.test');
+    await user.type(screen.getByLabelText('QA API URL'), 'https://url-qa.test');
+
+    const importButton = screen.getByRole('button', {
+      name: 'Import cURL & Compare',
+    });
+    expect(importButton).toBeEnabled();
+    await user.click(importButton);
+
+    expect(screen.getByLabelText('Dev')).toHaveValue('{\n  "value": 1\n}');
+    expect(screen.getByLabelText('QA')).toHaveValue('{\n  "value": 2\n}');
+    expect(screen.getByLabelText('Prod')).toHaveValue('');
+    expect(await screen.findByText('value')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(fetch).mock.calls.every(
+        ([url, init]) => url === '/api/proxy' && init?.method === 'POST',
+      ),
+    ).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/proxy',
+      expect.objectContaining({ body: expect.stringContaining('"method":"POST"') }),
+    );
+  });
+
+  it('shows the detailed proxy error when cURL execution fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: async () =>
+          JSON.stringify({
+            error:
+              'Unable to fetch URL: fetch failed (UND_ERR_CONNECT_TIMEOUT)',
+          }),
+      } as Response),
+    ));
+    render(<Home />);
+
+    await user.type(
+      screen.getByLabelText('Dev cURL'),
+      "curl 'https://dev.example.com/data'",
+    );
+    await user.type(
+      screen.getByLabelText('QA cURL'),
+      "curl 'https://qa.example.com/data'",
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Import cURL & Compare' }),
+    );
+
+    expect(
+      await screen.findByText(
+        /Unable to fetch URL: fetch failed \(UND_ERR_CONNECT_TIMEOUT\)/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('clears each environment URL independently', async () => {

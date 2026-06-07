@@ -2,6 +2,7 @@
 
 import { useState, type ChangeEvent } from 'react';
 import { compareJson } from '@/src/lib/compare';
+import { parseCurlCommand, type CurlRequest } from '@/src/lib/curl';
 import {
   generateIgnoreSuggestions,
   getIgnoreFieldFromPath,
@@ -20,6 +21,9 @@ export default function Home() {
   const [devUrl, setDevUrl] = useState('');
   const [qaUrl, setQaUrl] = useState('');
   const [prodUrl, setProdUrl] = useState('');
+  const [devCurl, setDevCurl] = useState('');
+  const [qaCurl, setQaCurl] = useState('');
+  const [prodCurl, setProdCurl] = useState('');
   const [diffs, setDiffs] = useState<DiffEntry[]>([]);
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('ALL');
   const [pathSearch, setPathSearch] = useState('');
@@ -29,7 +33,8 @@ export default function Home() {
   const [comparedProdJson, setComparedProdJson] = useState<unknown>();
   const [error, setError] = useState('');
   const [hasCompared, setHasCompared] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
+  const [isUrlFetching, setIsUrlFetching] = useState(false);
+  const [isCurlFetching, setIsCurlFetching] = useState(false);
   const [copied, setCopied] = useState(false);
   const [ignoreFields, setIgnoreFields] = useState('');
   const [ignoreSuggestions, setIgnoreSuggestions] = useState<IgnoreSuggestion[]>([]);
@@ -38,6 +43,9 @@ export default function Home() {
     value.trim(),
   ).length;
   const populatedUrlCount = [devUrl, qaUrl, prodUrl].filter((value) =>
+    value.trim(),
+  ).length;
+  const populatedCurlCount = [devCurl, qaCurl, prodCurl].filter((value) =>
     value.trim(),
   ).length;
 
@@ -329,7 +337,32 @@ export default function Home() {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch ${targetUrl}: ${response.status} ${response.statusText}`);
+      throw new Error(
+        await getProxyErrorMessage(
+          response,
+          `Failed to fetch ${targetUrl}`,
+        ),
+      );
+    }
+
+    return response.text();
+  };
+
+  const fetchCurlWithProxy = async (curlRequest: CurlRequest) => {
+    const response = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(curlRequest),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        await getProxyErrorMessage(
+          response,
+          `Failed to execute cURL request for ${curlRequest.url}`,
+        ),
+      );
     }
 
     return response.text();
@@ -354,7 +387,7 @@ export default function Home() {
 
   const handleFetchAndCompare = async () => {
     setError('');
-    setIsFetching(true);
+    setIsUrlFetching(true);
     setHasCompared(true);
     setDiffFilter('ALL');
     setPathSearch('');
@@ -389,7 +422,7 @@ export default function Home() {
         err instanceof Error ? err.message : 'Failed to fetch and compare URLs',
       );
     } finally {
-      setIsFetching(false);
+      setIsUrlFetching(false);
     }
   };
 
@@ -406,6 +439,76 @@ export default function Home() {
       showToast(`Loaded ${file.name}`);
     } catch {
       setError('Invalid JSON in uploaded Dev response');
+    }
+  };
+
+  const fetchAndParseOptionalCurl = async (
+    command: string,
+    environment: 'Dev' | 'QA' | 'Prod',
+  ): Promise<OptionalJsonSuccess> => {
+    if (!command.trim()) {
+      return { ok: true, active: false, value: undefined };
+    }
+
+    let curlRequest: CurlRequest;
+    try {
+      curlRequest = parseCurlCommand(command);
+    } catch (parseError) {
+      throw new Error(
+        `${environment} cURL: ${
+          parseError instanceof Error ? parseError.message : 'Invalid command'
+        }`,
+      );
+    }
+
+    const text = await fetchCurlWithProxy(curlRequest);
+    try {
+      return { ok: true, active: true, value: JSON.parse(text) };
+    } catch {
+      throw new Error(`${environment} cURL response is not valid JSON`);
+    }
+  };
+
+  const handleCurlImportAndCompare = async () => {
+    setError('');
+    setIsCurlFetching(true);
+    setHasCompared(true);
+    setDiffFilter('ALL');
+    setPathSearch('');
+    setResultView('TABLE');
+
+    try {
+      const [parsedDev, parsedQa, parsedProd] = await Promise.all([
+        fetchAndParseOptionalCurl(devCurl, 'Dev'),
+        fetchAndParseOptionalCurl(qaCurl, 'QA'),
+        fetchAndParseOptionalCurl(prodCurl, 'Prod'),
+      ]);
+
+      setDevJson(parsedDev.active ? JSON.stringify(parsedDev.value, null, 2) : '');
+      setQaJson(parsedQa.active ? JSON.stringify(parsedQa.value, null, 2) : '');
+      setProdJson(parsedProd.active ? JSON.stringify(parsedProd.value, null, 2) : '');
+      setComparedDevJson(parsedDev.active ? parsedDev.value : undefined);
+      setComparedQaJson(parsedQa.active ? parsedQa.value : undefined);
+      setComparedProdJson(parsedProd.active ? parsedProd.value : undefined);
+      resetIgnoreRules();
+      setDiffs(
+        compareJson(parsedDev.value, parsedQa.value, parsedProd.value, [], {
+          dev: parsedDev.active,
+          qa: parsedQa.active,
+          prod: parsedProd.active,
+        }),
+      );
+      showToast('Imported cURL requests and compared responses');
+    } catch (curlError: unknown) {
+      console.error(curlError);
+      setDiffs([]);
+      setError(
+        curlError instanceof Error
+          ? curlError.message
+          : 'Failed to import and compare cURL requests',
+      );
+    } finally {
+      setIsCurlFetching(false);
     }
   };
 
@@ -591,9 +694,38 @@ export default function Home() {
               onChange={setProdUrl}
             />
           </div>
+          <div className="rounded-lg border border-gray-300 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
+            <div className="mb-3">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                cURL Import
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Paste exported cURL commands. Requests run through the secure proxy
+                and their JSON responses are compared.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <CurlInput
+                environment="Dev"
+                value={devCurl}
+                onChange={setDevCurl}
+              />
+              <CurlInput
+                environment="QA"
+                value={qaCurl}
+                onChange={setQaCurl}
+              />
+              <CurlInput
+                environment="Prod"
+                value={prodCurl}
+                onChange={setProdCurl}
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex justify-center gap-4 mb-8">
+        <div className="flex flex-wrap justify-center gap-4 mb-8">
           <button
+            type="button"
             onClick={handleFormatBoth}
             className="px-8 py-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:disabled:bg-zinc-800 text-gray-800 dark:text-gray-200 disabled:text-gray-400 dark:disabled:text-zinc-600 font-semibold rounded-lg transition-colors"
             disabled={!devJson.trim() && !qaJson.trim() && !prodJson.trim()}
@@ -601,6 +733,7 @@ export default function Home() {
             Format JSON
           </button>
           <button
+            type="button"
             onClick={handleCompare}
             className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
             disabled={populatedJsonCount < 2}
@@ -608,11 +741,24 @@ export default function Home() {
             Compare
           </button>
           <button
+            type="button"
             onClick={handleFetchAndCompare}
             className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:disabled:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
-            disabled={populatedUrlCount < 2 || isFetching}
+            disabled={
+              populatedUrlCount < 2 || isUrlFetching || isCurlFetching
+            }
           >
-            {isFetching ? 'Fetching…' : 'Fetch & Compare'}
+            {isUrlFetching ? 'Fetching URLs…' : 'Fetch & Compare'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCurlImportAndCompare}
+            className="rounded-lg bg-violet-600 px-8 py-3 font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-400 dark:bg-violet-500 dark:hover:bg-violet-600 dark:disabled:bg-zinc-600"
+            disabled={
+              populatedCurlCount < 2 || isCurlFetching || isUrlFetching
+            }
+          >
+            {isCurlFetching ? 'Importing cURL…' : 'Import cURL & Compare'}
           </button>
         </div>
 
@@ -1054,6 +1200,44 @@ function ApiUrlInput({
   );
 }
 
+function CurlInput({
+  environment,
+  value,
+  onChange,
+}: {
+  environment: 'Dev' | 'QA' | 'Prod';
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <label
+        htmlFor={`${environment.toLowerCase()}-curl`}
+        className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+      >
+        {environment} cURL
+      </label>
+      <textarea
+        id={`${environment.toLowerCase()}-curl`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={`curl 'https://${environment.toLowerCase()}.example.com/api' ...`}
+        className="min-h-32 w-full resize-y rounded-lg border border-gray-300 bg-white p-3 pr-16 font-mono text-xs text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white dark:placeholder-gray-400"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label={`Clear ${environment} cURL`}
+          className="absolute right-2 top-8 rounded px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:text-slate-200 dark:hover:bg-zinc-700"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 function JsonTreeComparison({
   devJson,
   qaJson,
@@ -1422,4 +1606,28 @@ function parseOptionalJson(input: string): OptionalJsonResult {
   return parsed.ok
     ? { ok: true, active: true, value: parsed.value }
     : { ok: false, active: true };
+}
+
+async function getProxyErrorMessage(
+  response: Response,
+  prefix: string,
+): Promise<string> {
+  const fallback = `${response.status} ${response.statusText}`.trim();
+
+  try {
+    const payload = JSON.parse(await response.text()) as {
+      error?: unknown;
+      body?: unknown;
+    };
+    const error =
+      typeof payload.error === 'string' ? payload.error : fallback;
+    const body =
+      typeof payload.body === 'string' && payload.body.trim()
+        ? `: ${payload.body.trim()}`
+        : '';
+
+    return `${prefix}: ${error}${body}`;
+  } catch {
+    return `${prefix}: ${fallback}`;
+  }
 }
