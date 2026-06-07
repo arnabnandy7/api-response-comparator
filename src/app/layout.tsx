@@ -4,7 +4,8 @@ import { ThemeProvider } from '@/src/components/theme-provider';
 
 export const metadata: Metadata = {
   title: 'API Response Comparator',
-  description: 'Compare API response payloads side by side.',
+  description:
+    'Compare JSON API responses across Dev, QA, and Prod using JSON, URLs, or cURL.',
 };
 
 export default function RootLayout({

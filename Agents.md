@@ -1,102 +1,119 @@
 # Agent Instructions
 
-Use this file as project guidance for automated coding agents working on API Response Comparator.
+Use this file as project guidance for automated coding agents working on API
+Response Comparator.
 
 ## Project Summary
 
-This is a Next.js app that compares two JSON API responses.
-
-Core flow:
+This Next.js application compares JSON API responses across Dev, QA, and Prod.
+Any two environments are sufficient.
 
 ```text
-Parse JSON or fetch remote JSON
+Paste, upload, fetch, or import cURL
+-> Parse JSON
 -> Flatten nested paths
--> Compare flattened values
--> Display DiffEntry[] in a table
+-> Compare active environments against the first populated baseline
+-> Display and export DiffEntry[]
 ```
 
-The app supports:
+Current features:
 
-- manual paste entry for `JSON A` and `JSON B`
-- JSON file uploads for each response
-- remote API URL fetching via `/api/proxy`
-- ignore-field filtering during comparison
-- copy diff output to clipboard
-- download styled Excel reports
-- light/dark theme toggling
+- manual JSON entry, formatting, upload, and clear controls
+- direct HTTPS URL fetch comparison
+- safe cURL parsing and structured proxy execution
+- optional third environment
+- ignore fields and scoring-based volatility suggestions
+- `ADDED`, `REMOVED`, `CHANGED`, and `TYPE_CHANGE`
+- separate rows for different outcomes on the same path
+- contract-change alert
+- count filters and path search
+- table and color-coded JSON tree views
+- copy, JSON download, and Excel download
+- complete page reset with in-flight request invalidation
+- light/dark themes
 
 ## Important Files
 
-- `src/app/page.tsx`: main UI and user interaction
-- `src/app/api/proxy/route.ts`: server-side proxy route for fetching external JSON URLs
-- `src/components/theme-toggle.tsx`: theme toggle button for light/dark mode
-- `src/components/theme-provider.tsx`: theme provider wrapper
-- `src/lib/flatten.ts`: converts JSON values into path-value pairs
-- `src/lib/compare.ts`: compares flattened JSON values and supports ignore keys
-- `src/types/diff.ts`: shared `DiffEntry` type
-- `test/`: test suite mirroring the `src/` hierarchy
+- `src/app/page.tsx`: UI, state, actions, exports, and result rendering
+- `src/app/api/proxy/route.ts`: secured URL and structured-request proxy
+- `src/components/theme-toggle.tsx`: theme control
+- `src/components/theme-provider.tsx`: theme provider
+- `src/lib/compare.ts`: three-environment comparison
+- `src/lib/curl.ts`: safe cURL tokenizer and parser
+- `src/lib/flatten.ts`: nested JSON path flattening
+- `src/lib/ignore-rules.ts`: volatility scoring
+- `src/types/diff.ts`: shared `DiffEntry`
+- `test/`: mirrored test hierarchy
 
 ## Development Rules
 
-- Keep comparison logic in `src/lib`.
+- Keep comparison and parsing logic in `src/lib`.
 - Keep shared types in `src/types`.
-- Keep tests under `test/`, not colocated inside `src`.
-- Mirror source hierarchy when adding tests:
-
-```text
-src/app/page.tsx              -> test/app/page.test.tsx
-src/app/api/proxy/route.ts    -> test/app/api/proxy/route.test.ts
-src/lib/compare.ts            -> test/lib/compare.test.ts
-src/lib/flatten.ts            -> test/lib/flatten.test.ts
-src/types/diff.ts             -> test/types/diff.test.ts
-```
-
+- Keep tests under `test/`, mirroring source paths.
 - Prefer small, focused changes.
-- Avoid unrelated refactors.
-- Preserve accessibility in the UI. Labels should be associated with controls.
-- Use visible UI behavior in React Testing Library tests.
-- For route handlers, prefer node-compatible test environments and stub `fetch` appropriately.
-
-## Commands
-
-Run tests:
+- Preserve accessibility and visible UI behavior.
+- Use React Testing Library queries by label, role, and text.
+- Use node-compatible route tests and stub Undici/browser fetch appropriately.
+- Run tests, lint, and build for meaningful changes.
 
 ```bash
 npm test
-```
-
-Run lint:
-
-```bash
 npm run lint
-```
-
-Run production build:
-
-```bash
 npm run build
 ```
 
-For meaningful code changes, run all three before finishing.
-
 ## Comparator Contract
 
-`JSON A` is the original value. `JSON B` is the new value.
-
-`compareJson(jsonA, jsonB, ignoreKeys?)` returns:
+The first active environment in Dev, QA, Prod order is the baseline. Blank
+environments are inactive and must not create false `REMOVED` entries.
 
 ```ts
-DiffEntry[]
+compareJson(
+  devJson,
+  qaJson,
+  prodJson,
+  ignoreFields?,
+  comparedEnvironments?,
+): DiffEntry[]
 ```
 
-Supported diff types:
+```ts
+interface DiffEntry {
+  path: string;
+  type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'TYPE_CHANGE';
+  devValue?: unknown;
+  qaValue?: unknown;
+  prodValue?: unknown;
+}
+```
 
-- `ADDED`: path exists only in `JSON B`
-- `REMOVED`: path exists only in `JSON A`
-- `CHANGED`: path exists in both, but values differ
+- Compare each active downstream environment against the baseline.
+- Combine entries only when path and type match.
+- Preserve separate rows when one path has different outcome types.
+- Arrays compare by index; paths look like `items[0].price`.
+- Ignore rules match path segments by leaf field name.
 
-The app flattens nested objects and arrays so differences appear as paths like `user.name` or `items[0].price`.
+## Input Modes
+
+- **Compare** reads only populated JSON fields.
+- **Fetch & Compare** reads only API URL fields.
+- **Import cURL & Compare** reads only cURL fields.
+- URL and cURL actions must remain exclusive and use independent loading state.
+- Any two inputs in the selected mode are sufficient.
+- Reset clears every mode and invalidates pending responses.
+
+## Proxy Security
+
+- HTTPS only
+- no direct IP, localhost, URL credentials, or custom ports
+- public DNS validation and pinned Undici connections
+- redirect revalidation with credential stripping across origins
+- method allowlist and unsafe header filtering
+- 1 MB request-body and 50 MB response limits
+- 30-second timeout
+- no shell execution for cURL imports
 
 ## Dependency Note
 
-`package.json` includes a PostCSS override so npm resolves a patched PostCSS version while using the current Next.js release. Do not remove it unless Next.js no longer needs it and `npm audit` stays clean.
+Keep the patched `postcss` and `uuid` npm overrides unless dependency updates
+make them unnecessary and all verification remains clean.

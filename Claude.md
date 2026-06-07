@@ -1,38 +1,33 @@
 # Claude Instructions
 
-This repository is API Response Comparator, a small Next.js and TypeScript app for comparing two JSON API responses.
+This repository is API Response Comparator, a Next.js and TypeScript app for
+comparing JSON responses across Dev, QA, and Prod.
 
-## What To Know First
+## Core Behavior
 
-The app takes two JSON inputs:
-
-- `JSON A`: original response
-- `JSON B`: new response
-
-It also supports two remote JSON URLs:
-
-- `API URL A`
-- `API URL B`
-
-Then it:
+Any two environments are enough. The first populated environment in Dev, QA,
+Prod order is the baseline.
 
 ```text
-parse JSON or fetch remote JSON
+input JSON, files, URLs, or cURL
+-> parse JSON
 -> flatten nested paths
--> compare flattened values
--> display DiffEntry[] in a table
+-> compare each active downstream environment with the baseline
+-> render DiffEntry[] in table or tree form
 ```
-
-The core data shape is:
 
 ```ts
 export interface DiffEntry {
   path: string;
-  type: 'ADDED' | 'REMOVED' | 'CHANGED';
-  oldValue?: unknown;
-  newValue?: unknown;
+  type: 'ADDED' | 'REMOVED' | 'CHANGED' | 'TYPE_CHANGE';
+  devValue?: unknown;
+  qaValue?: unknown;
+  prodValue?: unknown;
 }
 ```
+
+A path may appear more than once when environments have different outcomes. For
+example, QA can produce `TYPE_CHANGE` while Prod produces `CHANGED`.
 
 ## Repository Layout
 
@@ -40,52 +35,62 @@ export interface DiffEntry {
 src/
   app/
     page.tsx
-    layout.tsx
-    globals.css
-    api/
-      proxy/route.ts
+    api/proxy/route.ts
   components/
     theme-provider.tsx
     theme-toggle.tsx
   lib/
     compare.ts
+    curl.ts
     flatten.ts
+    ignore-rules.ts
   types/
     diff.ts
 
 test/
   app/
-    api/
-      proxy/route.test.ts
-    page.test.tsx
+  app/api/proxy/
   lib/
   types/
 ```
 
-Tests should stay under `test/` and mirror the `src/` hierarchy.
+Tests stay under `test/` and mirror `src`.
 
 ## Coding Guidance
 
-- Keep `flatten` behavior in `src/lib/flatten.ts`.
-- Keep comparison behavior in `src/lib/compare.ts`.
-- Keep UI behavior in `src/app/page.tsx` unless it becomes large enough to split.
-- Keep shared type changes in `src/types`.
-- Avoid changing public behavior without updating tests.
-- Prefer clear, direct TypeScript over extra abstraction.
-- Do not move tests back into `src`.
-- For route handlers, keep tests in a node-compatible environment and stub `fetch`.
+- Keep comparison, flattening, cURL parsing, and ignore scoring in `src/lib`.
+- Keep shared contracts in `src/types`.
+- Keep route security in `src/app/api/proxy/route.ts`.
+- Keep UI behavior in `src/app/page.tsx` unless splitting clearly helps.
+- Preserve optional environments and mixed-outcome rows.
+- Avoid public behavior changes without tests and documentation.
+- Prefer direct, strict TypeScript over unnecessary abstraction.
 
 ## UI Guidance
 
-- Preserve accessible labels for inputs and controls.
-- Test UI behavior with React Testing Library using labels, roles, and visible text.
-- Keep the results table focused on `Path`, `Type`, `JSON A`, and `JSON B`.
-- Show parse errors rather than attempting a comparison on invalid JSON.
-- Support file uploads, URL fetch comparison, ignore-field filtering, copy diff, and Excel export.
+- Preserve accessible labels and keyboard behavior.
+- Keep Dev, QA, and Prod result columns.
+- Keep URL fetch and cURL import transport-exclusive.
+- Keep type filters, path search, contract warning, and table/tree views.
+- Keep copy, JSON export, Excel export, generated ignore rules, themes, uploads,
+  clear controls, and full reset.
+- Reset must prevent pending requests from repopulating cleared state.
+
+## cURL and Proxy Guidance
+
+cURL commands are parsed as data; never execute a shell. The structured proxy
+supports common API methods, headers, and bodies while enforcing:
+
+- HTTPS and public-network destinations only
+- no direct IPs, localhost, URL credentials, or custom ports
+- DNS validation and redirect revalidation
+- credential removal on cross-origin redirects
+- request/response size and timeout limits
+- unsafe header filtering
+
+Error messages should preserve useful upstream status or network details.
 
 ## Verification
-
-Use these commands before completing changes:
 
 ```bash
 npm test
@@ -93,6 +98,7 @@ npm run lint
 npm run build
 ```
 
-## Security Note
+## Dependency Note
 
-The project uses an npm `overrides` entry for `postcss` to ensure a patched version is installed. Keep this unless dependency updates make it unnecessary and verification still passes.
+`package.json` pins patched `postcss` and `uuid` versions through npm overrides.
+Keep them unless updates make them unnecessary and verification remains clean.
