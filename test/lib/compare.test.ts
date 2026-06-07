@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { compareJson } from '@/src/lib/compare';
 
 describe('compareJson', () => {
-  it('returns added, removed, and changed diff entries', () => {
-    const jsonA = {
+  it('returns added, removed, and changed entries across three environments', () => {
+    const dev = {
       user: {
         name: 'Arnab',
         age: 30,
@@ -11,7 +11,7 @@ describe('compareJson', () => {
       roles: ['admin'],
       removed: true,
     };
-    const jsonB = {
+    const qa = {
       user: {
         name: 'Arnab',
         age: 31,
@@ -19,75 +19,96 @@ describe('compareJson', () => {
       roles: ['admin', 'owner'],
       added: 'new',
     };
+    const prod = {
+      user: {
+        name: 'Arnab',
+        age: 32,
+      },
+      roles: ['admin', 'owner'],
+      added: 'new',
+    };
 
-    expect(compareJson(jsonA, jsonB)).toEqual([
+    expect(compareJson(dev, qa, prod)).toEqual([
       {
         path: 'added',
         type: 'ADDED',
-        newValue: 'new',
+        qaValue: 'new',
+        prodValue: 'new',
       },
       {
         path: 'removed',
         type: 'REMOVED',
-        oldValue: true,
+        devValue: true,
       },
       {
         path: 'roles[1]',
         type: 'ADDED',
-        newValue: 'owner',
+        qaValue: 'owner',
+        prodValue: 'owner',
       },
       {
         path: 'user.age',
         type: 'CHANGED',
-        oldValue: 30,
-        newValue: 31,
+        devValue: 30,
+        qaValue: 31,
+        prodValue: 32,
       },
     ]);
   });
 
-  it('returns an empty array when both JSON values match', () => {
+  it('returns an empty array when all JSON values match', () => {
     const value = {
       ok: true,
       data: [{ id: 1 }],
     };
 
-    expect(compareJson(value, value)).toEqual([]);
+    expect(compareJson(value, value, value)).toEqual([]);
   });
 
   it('returns changed diff for array root when an empty array becomes an array of objects', () => {
-    const jsonA = { x: [] };
-    const jsonB = { x: [{ j: '' }] };
+    const dev = { x: [] };
+    const qa = { x: [{ j: '' }] };
+    const prod = { x: [{ j: '' }] };
 
-    expect(compareJson(jsonA, jsonB)).toEqual([
+    expect(compareJson(dev, qa, prod)).toEqual([
       {
         path: 'x',
         type: 'CHANGED',
-        oldValue: [],
-        newValue: [{ j: '' }],
+        devValue: [],
+        qaValue: [{ j: '' }],
+        prodValue: [{ j: '' }],
       },
       {
         path: 'x[0].j',
         type: 'ADDED',
-        newValue: '',
+        qaValue: '',
+        prodValue: '',
       },
     ]);
   });
 
   it('ignores specified fields when comparing JSON', () => {
-    const jsonA = {
+    const dev = {
       user: {
         creatUserId: 'abc',
         name: 'Arnab',
       },
     };
-    const jsonB = {
+    const qa = {
       user: {
         creatUserId: 'def',
         name: 'Arnab',
       },
     };
 
-    expect(compareJson(jsonA, jsonB, ['creatUserId'])).toEqual([]);
+    const prod = {
+      user: {
+        creatUserId: 'ghi',
+        name: 'Arnab',
+      },
+    };
+
+    expect(compareJson(dev, qa, prod, ['creatUserId'])).toEqual([]);
   });
 
   it('reports a type change when the same path changes JSON type', () => {
@@ -95,19 +116,103 @@ describe('compareJson', () => {
       compareJson(
         { user: { id: 101, active: true } },
         { user: { id: '101', active: 'true' } },
+        { user: { id: 101, active: 'true' } },
       ),
     ).toEqual([
       {
         path: 'user.active',
         type: 'TYPE_CHANGE',
-        oldValue: true,
-        newValue: 'true',
+        devValue: true,
+        qaValue: 'true',
+        prodValue: 'true',
       },
       {
         path: 'user.id',
         type: 'TYPE_CHANGE',
-        oldValue: 101,
-        newValue: '101',
+        devValue: 101,
+        qaValue: '101',
+      },
+    ]);
+  });
+
+  it('returns separate rows when one environment changes type and another changes value', () => {
+    expect(
+      compareJson(
+        { amount: 100 },
+        { amount: '100' },
+        { amount: 200 },
+      ),
+    ).toEqual([
+      {
+        path: 'amount',
+        type: 'TYPE_CHANGE',
+        devValue: 100,
+        qaValue: '100',
+      },
+      {
+        path: 'amount',
+        type: 'CHANGED',
+        devValue: 100,
+        prodValue: 200,
+      },
+    ]);
+  });
+
+  it('reports a change when only Prod differs from Dev and QA', () => {
+    expect(
+      compareJson(
+        { status: 'ready' },
+        { status: 'ready' },
+        { status: 'deployed' },
+      ),
+    ).toEqual([
+      {
+        path: 'status',
+        type: 'CHANGED',
+        devValue: 'ready',
+        prodValue: 'deployed',
+      },
+    ]);
+  });
+
+  it('ignores an inactive Prod environment instead of reporting removals', () => {
+    expect(
+      compareJson(
+        { value: 1, stable: true },
+        { value: 2, stable: true },
+        undefined,
+        [],
+        { dev: true, qa: true, prod: false },
+      ),
+    ).toEqual([
+      {
+        path: 'value',
+        type: 'CHANGED',
+        devValue: 1,
+        qaValue: 2,
+      },
+    ]);
+  });
+
+  it('uses QA as the baseline when Dev is inactive', () => {
+    expect(
+      compareJson(
+        undefined,
+        { retained: true, removed: true },
+        { retained: true, added: true },
+        [],
+        { dev: false, qa: true, prod: true },
+      ),
+    ).toEqual([
+      {
+        path: 'added',
+        type: 'ADDED',
+        prodValue: true,
+      },
+      {
+        path: 'removed',
+        type: 'REMOVED',
+        qaValue: true,
       },
     ]);
   });

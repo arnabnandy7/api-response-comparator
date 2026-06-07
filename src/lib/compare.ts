@@ -1,17 +1,47 @@
 import type { DiffEntry } from '@/src/types/diff';
 import { flatten } from './flatten';
 
+export type ComparedEnvironments = {
+  dev: boolean;
+  qa: boolean;
+  prod: boolean;
+};
+
 export function compareJson(
-  jsonA: unknown,
-  jsonB: unknown,
+  devJson: unknown,
+  qaJson: unknown,
+  prodJson: unknown,
   ignoreFields: string[] = [],
+  comparedEnvironments: ComparedEnvironments = {
+    dev: true,
+    qa: true,
+    prod: true,
+  },
 ): DiffEntry[] {
-  const valuesA = flatten(jsonA);
-  const valuesB = flatten(jsonB);
+  const environments = [
+    {
+      key: 'devValue' as const,
+      active: comparedEnvironments.dev,
+      root: devJson,
+      values: comparedEnvironments.dev ? flatten(devJson) : {},
+    },
+    {
+      key: 'qaValue' as const,
+      active: comparedEnvironments.qa,
+      root: qaJson,
+      values: comparedEnvironments.qa ? flatten(qaJson) : {},
+    },
+    {
+      key: 'prodValue' as const,
+      active: comparedEnvironments.prod,
+      root: prodJson,
+      values: comparedEnvironments.prod ? flatten(prodJson) : {},
+    },
+  ].filter((environment) => environment.active);
   const ignoreKeys = ignoreFields.map((key) => key.trim()).filter(Boolean);
 
   const paths = Array.from(
-    new Set([...Object.keys(valuesA), ...Object.keys(valuesB)]),
+    new Set(environments.flatMap((environment) => Object.keys(environment.values))),
   ).sort();
 
   return paths.reduce<DiffEntry[]>((diffs, path) => {
@@ -19,65 +49,77 @@ export function compareJson(
       return diffs;
     }
 
-    const jsonAHasPath = Object.prototype.hasOwnProperty.call(valuesA, path);
-    const jsonBHasPath = Object.prototype.hasOwnProperty.call(valuesB, path);
+    const values = environments.map((environment) => ({
+      ...environment,
+      comparable: getComparableValue(
+        environment.root,
+        environment.values,
+        path,
+      ),
+    }));
+    const baseline = values[0].comparable;
 
-    if (!jsonAHasPath && jsonBHasPath) {
-      const originalA = getValueAtPath(jsonA, path);
+    const diffsByType = new Map<DiffEntry['type'], DiffEntry>();
 
-      if (originalA.found) {
-        diffs.push({
-          path,
-          type: 'CHANGED',
-          oldValue: originalA.value,
-          newValue: valuesB[path],
-        });
-        return diffs;
+    values.slice(1).forEach(({ key, comparable }) => {
+      const type = getDiffType(baseline, comparable);
+      if (!type) {
+        return;
       }
 
-      diffs.push({
-        path,
-        type: 'ADDED',
-        newValue: valuesB[path],
-      });
-      return diffs;
-    }
-
-    if (jsonAHasPath && !jsonBHasPath) {
-      const originalB = getValueAtPath(jsonB, path);
-
-      if (originalB.found) {
-        diffs.push({
-          path,
-          type: 'CHANGED',
-          oldValue: valuesA[path],
-          newValue: originalB.value,
-        });
-        return diffs;
+      let diff = diffsByType.get(type);
+      if (!diff) {
+        diff = { path, type };
+        if (baseline.found) {
+          diff[values[0].key] = baseline.value;
+        }
+        diffsByType.set(type, diff);
       }
+      if (comparable.found) {
+        diff[key] = comparable.value;
+      }
+    });
 
-      diffs.push({
-        path,
-        type: 'REMOVED',
-        oldValue: valuesA[path],
-      });
-      return diffs;
-    }
-
-    if (!isEqual(valuesA[path], valuesB[path])) {
-      diffs.push({
-        path,
-        type:
-          getJsonType(valuesA[path]) === getJsonType(valuesB[path])
-            ? 'CHANGED'
-            : 'TYPE_CHANGE',
-        oldValue: valuesA[path],
-        newValue: valuesB[path],
-      });
-    }
-
+    diffs.push(...diffsByType.values());
     return diffs;
   }, []);
+}
+
+function getDiffType(
+  baseline: { found: boolean; value: unknown },
+  target: { found: boolean; value: unknown },
+): DiffEntry['type'] | undefined {
+  if (!baseline.found && !target.found) {
+    return undefined;
+  }
+
+  if (!baseline.found) {
+    return 'ADDED';
+  }
+
+  if (!target.found) {
+    return 'REMOVED';
+  }
+
+  if (isEqual(baseline.value, target.value)) {
+    return undefined;
+  }
+
+  return getJsonType(baseline.value) === getJsonType(target.value)
+    ? 'CHANGED'
+    : 'TYPE_CHANGE';
+}
+
+function getComparableValue(
+  root: unknown,
+  flattened: Record<string, unknown>,
+  path: string,
+): { found: boolean; value: unknown } {
+  if (Object.prototype.hasOwnProperty.call(flattened, path)) {
+    return { found: true, value: flattened[path] };
+  }
+
+  return getValueAtPath(root, path);
 }
 
 function getValueAtPath(root: unknown, path: string): { found: boolean; value: unknown } {

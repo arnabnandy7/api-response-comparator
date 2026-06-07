@@ -6,7 +6,25 @@ import { Agent, fetch as undiciFetch } from 'undici';
 
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_RESPONSE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_REQUEST_BODY_SIZE = 1024 * 1024; // 1MB
 const MAX_REDIRECTS = 5;
+const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
+const BLOCKED_REQUEST_HEADERS = new Set([
+  'connection',
+  'content-length',
+  'host',
+  'proxy-authorization',
+  'proxy-connection',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+type ProxyRequest = {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
 
 const BLOCKED_ADDRESSES = new BlockList();
 
@@ -109,8 +127,14 @@ function createPublicNetworkAgent() {
   });
 }
 
-async function fetchPublicJson(target: URL, signal: AbortSignal) {
+async function fetchPublicJson(
+  target: URL,
+  signal: AbortSignal,
+  request: Omit<ProxyRequest, 'url'> = {},
+) {
   let currentTarget = target;
+  const method = (request.method ?? 'GET').toUpperCase();
+  const requestHeaders = sanitizeRequestHeaders(request.headers);
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
     validateTarget(currentTarget);
@@ -119,11 +143,16 @@ async function fetchPublicJson(target: URL, signal: AbortSignal) {
     try {
       const response = await undiciFetch(currentTarget, {
         dispatcher: agent,
-        redirect: 'manual',
-        signal,
+        method,
         headers: {
           'user-agent': 'api-response-comparator/1.0',
+          ...requestHeaders,
         },
+        ...(method === 'GET' || method === 'HEAD' || request.body === undefined
+          ? {}
+          : { body: request.body }),
+        redirect: 'manual',
+        signal,
       });
 
       if (response.status < 300 || response.status >= 400) {
@@ -146,7 +175,12 @@ async function fetchPublicJson(target: URL, signal: AbortSignal) {
         throw new Error('Too many redirects');
       }
 
-      currentTarget = new URL(location, currentTarget);
+      const nextTarget = new URL(location, currentTarget);
+      if (nextTarget.origin !== currentTarget.origin) {
+        delete requestHeaders.authorization;
+        delete requestHeaders.cookie;
+      }
+      currentTarget = nextTarget;
     } finally {
       await agent.close();
     }
@@ -155,16 +189,11 @@ async function fetchPublicJson(target: URL, signal: AbortSignal) {
   throw new Error('Too many redirects');
 }
 
-export async function GET(request: Request) {
-  const url = new URL(request.url).searchParams.get('url');
-
-  if (!url) {
-    return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
-  }
-
+async function proxyRequest(proxyRequest: ProxyRequest) {
   let target: URL;
   try {
-    target = new URL(url);
+    validateProxyRequest(proxyRequest);
+    target = new URL(proxyRequest.url);
     validateTarget(target);
   } catch (error) {
     return NextResponse.json(
@@ -177,7 +206,7 @@ export async function GET(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetchPublicJson(target, controller.signal);
+    const response = await fetchPublicJson(target, controller.signal, proxyRequest);
 
     if (response.body.length > MAX_RESPONSE_SIZE) {
       return NextResponse.json({ error: 'Response too large' }, { status: 413 });
@@ -205,9 +234,107 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Request timeout' }, { status: 504 });
     }
 
-    const message = error instanceof Error ? error.message : 'Unknown fetch error';
+    const message = getNetworkErrorMessage(error);
     return NextResponse.json({ error: `Unable to fetch URL: ${message}` }, { status: 502 });
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function getNetworkErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Unknown fetch error';
+  }
+
+  const cause = error.cause;
+  if (cause && typeof cause === 'object') {
+    const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : '';
+    const message =
+      'message' in cause && typeof cause.message === 'string' ? cause.message : '';
+    const detail = [code, message].filter(Boolean).join(': ');
+    if (detail) {
+      return `${error.message} (${detail})`;
+    }
+  }
+
+  return error.message;
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url).searchParams.get('url');
+
+  if (!url) {
+    return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
+  }
+
+  return proxyRequest({ url });
+}
+
+export async function POST(request: Request) {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid proxy request body' }, { status: 400 });
+  }
+
+  if (!isProxyRequest(body)) {
+    return NextResponse.json({ error: 'Invalid proxy request body' }, { status: 400 });
+  }
+
+  return proxyRequest(body);
+}
+
+function validateProxyRequest(request: ProxyRequest) {
+  const method = (request.method ?? 'GET').toUpperCase();
+
+  if (!ALLOWED_METHODS.has(method)) {
+    throw new Error(`HTTP method ${method} is not supported`);
+  }
+
+  if (
+    request.body !== undefined &&
+    new TextEncoder().encode(request.body).byteLength > MAX_REQUEST_BODY_SIZE
+  ) {
+    throw new Error('Request body is too large');
+  }
+}
+
+function sanitizeRequestHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.entries(headers ?? {}).reduce<Record<string, string>>(
+    (safeHeaders, [name, value]) => {
+      const normalizedName = name.trim().toLowerCase();
+      if (!normalizedName || BLOCKED_REQUEST_HEADERS.has(normalizedName)) {
+        return safeHeaders;
+      }
+      safeHeaders[normalizedName] = value;
+      return safeHeaders;
+    },
+    {},
+  );
+}
+
+function isProxyRequest(value: unknown): value is ProxyRequest {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const request = value as Record<string, unknown>;
+  const headers = request.headers;
+
+  return (
+    typeof request.url === 'string' &&
+    (request.method === undefined || typeof request.method === 'string') &&
+    (request.body === undefined || typeof request.body === 'string') &&
+    (headers === undefined ||
+      (typeof headers === 'object' &&
+        headers !== null &&
+        Object.entries(headers).every(
+          ([name, headerValue]) =>
+            typeof name === 'string' && typeof headerValue === 'string',
+        )))
+  );
 }
