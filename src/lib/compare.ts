@@ -7,16 +7,18 @@ export type ComparedEnvironments = {
   prod: boolean;
 };
 
+const DEFAULT_COMPARED_ENVIRONMENTS: ComparedEnvironments = {
+  dev: true,
+  qa: true,
+  prod: true,
+};
+
 export function compareJson(
   devJson: unknown,
   qaJson: unknown,
   prodJson: unknown,
   ignoreFields: string[] = [],
-  comparedEnvironments: ComparedEnvironments = {
-    dev: true,
-    qa: true,
-    prod: true,
-  },
+  comparedEnvironments: ComparedEnvironments = DEFAULT_COMPARED_ENVIRONMENTS,
 ): DiffEntry[] {
   const environments = [
     {
@@ -42,7 +44,7 @@ export function compareJson(
 
   const paths = Array.from(
     new Set(environments.flatMap((environment) => Object.keys(environment.values))),
-  ).sort();
+  ).sort((left, right) => left.localeCompare(right));
 
   return paths.reduce<DiffEntry[]>((diffs, path) => {
     if (isIgnoredPath(path, ignoreKeys)) {

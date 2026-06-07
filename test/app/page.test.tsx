@@ -195,6 +195,43 @@ describe('Home', () => {
     );
   });
 
+  it('formats populated JSON fields and shows no differences for matching values', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('Dev'));
+    await user.paste('{"same":true}');
+    await user.click(screen.getByLabelText('QA'));
+    await user.paste('{"same":true}');
+    await user.click(screen.getByLabelText('Prod'));
+    await user.paste('{"same":true}');
+
+    await user.click(screen.getByRole('button', { name: 'Format JSON' }));
+    expect(screen.getByLabelText('Dev')).toHaveValue('{\n  "same": true\n}');
+    expect(screen.getByLabelText('QA')).toHaveValue('{\n  "same": true\n}');
+    expect(screen.getByLabelText('Prod')).toHaveValue('{\n  "same": true\n}');
+
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    expect(screen.getByText('No differences found.')).toBeInTheDocument();
+  });
+
+  it('reports all invalid JSON fields during formatting', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(screen.getByLabelText('Dev'));
+    await user.paste('{dev');
+    await user.click(screen.getByLabelText('QA'));
+    await user.paste('{qa');
+    await user.click(screen.getByLabelText('Prod'));
+    await user.paste('{prod');
+    await user.click(screen.getByRole('button', { name: 'Format JSON' }));
+
+    expect(screen.getByText(/Invalid JSON in Dev response/)).toBeInTheDocument();
+    expect(screen.getByText(/Invalid JSON in QA response/)).toBeInTheDocument();
+    expect(screen.getByText(/Invalid JSON in Prod response/)).toBeInTheDocument();
+  });
+
   it('keeps copy, Excel, and JSON exports for three-way results', async () => {
     const user = userEvent.setup();
     const createObjectURL = vi.fn(() => 'blob:api-diff');
@@ -265,6 +302,73 @@ describe('Home', () => {
           String(url).startsWith('/api/proxy?url=') && init?.method !== 'POST',
       ),
     ).toBe(true);
+  });
+
+  it('shows proxy response body details when URL fetching fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: async () =>
+          JSON.stringify({
+            error: 'Remote request failed: 503 Service Unavailable',
+            body: '{"message":"down"}',
+          }),
+      } as Response),
+    ));
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev API URL'), 'https://dev.test');
+    await user.type(screen.getByLabelText('QA API URL'), 'https://qa.test');
+    await user.click(screen.getByRole('button', { name: 'Fetch & Compare' }));
+
+    expect(
+      await screen.findByText(
+        /Failed to fetch https:\/\/dev.test: Remote request failed: 503 Service Unavailable: {"message":"down"}/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to HTTP status text when proxy errors are not JSON', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        text: async () => 'not-json',
+      } as Response),
+    ));
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev API URL'), 'https://dev.test');
+    await user.type(screen.getByLabelText('QA API URL'), 'https://qa.test');
+    await user.click(screen.getByRole('button', { name: 'Fetch & Compare' }));
+
+    expect(
+      await screen.findByText('Failed to fetch https://dev.test: 500 Server Error'),
+    ).toBeInTheDocument();
+  });
+
+  it('reports invalid JSON returned from fetched URLs', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => 'not-json',
+      } as Response),
+    ));
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev API URL'), 'https://dev.test');
+    await user.type(screen.getByLabelText('QA API URL'), 'https://qa.test');
+    await user.click(screen.getByRole('button', { name: 'Fetch & Compare' }));
+
+    expect(await screen.findByText('Dev response is not valid JSON')).toBeInTheDocument();
   });
 
   it('fetches and compares two URLs when the third is blank', async () => {
@@ -347,6 +451,48 @@ describe('Home', () => {
     );
   });
 
+  it('reports invalid cURL syntax before proxy execution', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev cURL'), 'not-curl https://dev.test');
+    await user.type(screen.getByLabelText('QA cURL'), "curl 'https://qa.test'");
+    await user.click(
+      screen.getByRole('button', { name: 'Import cURL & Compare' }),
+    );
+
+    expect(await screen.findByText('Dev cURL: Command must start with curl')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/proxy',
+      expect.objectContaining({ body: expect.stringContaining('"url":"https://qa.test"') }),
+    );
+  });
+
+  it('reports invalid JSON returned from cURL proxy execution', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => 'not-json',
+      } as Response),
+    ));
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev cURL'), "curl 'https://dev.test'");
+    await user.type(screen.getByLabelText('QA cURL'), "curl 'https://qa.test'");
+    await user.click(
+      screen.getByRole('button', { name: 'Import cURL & Compare' }),
+    );
+
+    expect(
+      await screen.findByText('Dev cURL response is not valid JSON'),
+    ).toBeInTheDocument();
+  });
+
   it('shows the detailed proxy error when cURL execution fails', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', vi.fn(() =>
@@ -396,6 +542,18 @@ describe('Home', () => {
     expect(screen.getByLabelText('Prod API URL')).toHaveValue('https://prod.test');
   });
 
+  it('clears cURL input independently', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.type(screen.getByLabelText('Dev cURL'), "curl 'https://dev.test'");
+    await user.type(screen.getByLabelText('QA cURL'), "curl 'https://qa.test'");
+    await user.click(screen.getByRole('button', { name: 'Clear Dev cURL' }));
+
+    expect(screen.getByLabelText('Dev cURL')).toHaveValue('');
+    expect(screen.getByLabelText('QA cURL')).toHaveValue("curl 'https://qa.test'");
+  });
+
   it('generates ignore rules from volatility across all environments', async () => {
     const user = userEvent.setup();
     render(<Home />);
@@ -410,6 +568,36 @@ describe('Home', () => {
 
     expect(screen.getByLabelText('Ignore fields')).toHaveValue('updatedAt');
     expect(screen.getByLabelText('Generated ignore suggestions')).toBeInTheDocument();
+  });
+
+  it('shows a toast when no volatile ignore rules are detected', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await fillEnvironments(user, { stable: true }, { stable: true }, { stable: true });
+    await user.click(screen.getByRole('button', { name: 'Generate Ignore Rules' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'No high-volatility fields detected',
+    );
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('');
+  });
+
+  it.each([
+    ['Dev', 'Invalid JSON in Dev response'],
+    ['QA', 'Invalid JSON in QA response'],
+    ['Prod', 'Invalid JSON in Prod response'],
+  ] as const)('validates the %s response before generating ignore rules', async (environment, message) => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await fillEnvironments(user, { ok: true }, { ok: true }, { ok: true });
+    await user.clear(screen.getByLabelText(environment));
+    await user.click(screen.getByLabelText(environment));
+    await user.paste('{bad');
+    await user.click(screen.getByRole('button', { name: 'Generate Ignore Rules' }));
+
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
   it('clears stale results and ignore rules when any environment changes', async () => {
@@ -446,6 +634,23 @@ describe('Home', () => {
     await user.click(screen.getByRole('button', { name: 'Compare' }));
 
     expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Dev', 'dev.json', 'Invalid JSON in uploaded Dev response'],
+    ['QA', 'qa.json', 'Invalid JSON in uploaded QA response'],
+    ['Prod', 'prod.json', 'Invalid JSON in uploaded Prod response'],
+  ] as const)('rejects invalid uploaded %s JSON', async (environment, fileName, message) => {
+    const user = userEvent.setup();
+    render(<Home />);
+    const file = new File(['{bad'], fileName, {
+      type: 'application/json',
+    });
+
+    await user.upload(screen.getByLabelText(`Upload ${environment}`), file);
+
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByLabelText(environment)).toHaveValue('');
   });
 
   it('uploads and clears Prod JSON using the same source-card workflow', async () => {
