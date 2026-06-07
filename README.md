@@ -256,3 +256,7 @@ test/
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for repository conventions and required
 verification.
+
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=arnabnandy7/api-response-comparator@github)](https://gitads.dev/v1/ad-track?source=arnabnandy7/api-response-comparator@github)
+
