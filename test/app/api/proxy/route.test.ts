@@ -172,6 +172,85 @@ describe('GET /api/proxy', () => {
     });
   });
 
+  it('returns 400 for invalid structured proxy request JSON', async () => {
+    const request = new Request('http://localhost/api/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{not-json',
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Invalid proxy request body' });
+  });
+
+  it('returns 400 for malformed structured proxy requests', async () => {
+    const request = new Request('http://localhost/api/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        url: 'https://api.example.com/items',
+        headers: {
+          accept: 42,
+        },
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Invalid proxy request body' });
+  });
+
+  it('rejects oversized structured request bodies before fetching', async () => {
+    const request = new Request('http://localhost/api/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        url: 'https://api.example.com/items',
+        method: 'POST',
+        body: 'x'.repeat(1024 * 1024 + 1),
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Request body is too large' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns 502 with response body when the remote server fails', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response('{"error":"upstream"}', {
+        status: 503,
+        statusText: 'Service Unavailable',
+      }),
+    );
+    const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: 'Remote request failed: 503 Service Unavailable',
+      body: '{"error":"upstream"}',
+    });
+  });
+
+  it('returns 502 when a redirect is missing its location header', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 302 }));
+    const request = new Request('http://localhost/api/proxy?url=https://api.example.com/data');
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: 'Unable to fetch URL: Remote server returned a redirect without a location',
+    });
+  });
+
   it('returns the underlying network error code for failed requests', async () => {
     mockFetch.mockRejectedValueOnce(
       new Error('fetch failed', {
