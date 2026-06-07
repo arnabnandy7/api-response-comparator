@@ -246,6 +246,8 @@ test/
 
 - Arrays are compared by index.
 - Object key order does not affect flattened path comparison.
+
+<!-- GitAds-Verify: 9C2Q9OU3CBG3347B8TSLS61O4NQBT9KA -->
 - Empty objects and arrays remain comparable values.
 - Invalid JSON and non-JSON remote responses are reported without comparison.
 - `package.json` pins patched `postcss` and `uuid` versions through npm overrides.
