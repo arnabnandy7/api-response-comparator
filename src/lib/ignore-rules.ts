@@ -109,11 +109,14 @@ export function getIgnoreFieldFromPath(path: string): string | undefined {
 }
 
 function countNormalizedPaths(diffs: DiffEntry[]): Map<string, number> {
-  return diffs.reduce((frequencies, diff) => {
-    const path = normalizeArrayPath(diff.path);
+  return Array.from(new Set(diffs.map((diff) => diff.path))).reduce(
+    (frequencies, diffPath) => {
+    const path = normalizeArrayPath(diffPath);
     frequencies.set(path, (frequencies.get(path) ?? 0) + 1);
     return frequencies;
-  }, new Map<string, number>());
+    },
+    new Map<string, number>(),
+  );
 }
 
 function scoreFieldName(path: string): { score: number; reason?: string } {

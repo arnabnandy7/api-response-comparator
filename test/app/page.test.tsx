@@ -105,6 +105,36 @@ describe('Home', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows separate rows when a path has value and type changes', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await fillEnvironments(
+      user,
+      { amount: 100 },
+      { amount: '100' },
+      { amount: 200 },
+    );
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+
+    const table = screen.getByRole('table', { name: 'Differences' });
+    const amountRows = within(table)
+      .getAllByText('amount')
+      .map((cell) => cell.closest('tr'));
+
+    expect(amountRows).toHaveLength(2);
+    expect(amountRows.some((row) => row?.textContent?.includes('TYPE_CHANGE'))).toBe(
+      true,
+    );
+    expect(amountRows.some((row) => row?.textContent?.includes('CHANGED'))).toBe(
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Changed: 1' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Type changes: 1' }),
+    ).toBeInTheDocument();
+  });
+
   it('filters by type and searches paths across three-way results', async () => {
     const user = userEvent.setup();
     render(<Home />);

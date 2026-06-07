@@ -59,42 +59,55 @@ export function compareJson(
     }));
     const baseline = values[0].comparable;
 
-    if (
-      values.every(
-        ({ comparable }) =>
-          comparable.found === baseline.found &&
-          (!comparable.found || isEqual(comparable.value, baseline.value)),
-      )
-    ) {
-      return diffs;
-    }
+    const diffsByType = new Map<DiffEntry['type'], DiffEntry>();
 
-    let type: DiffEntry['type'];
+    values.slice(1).forEach(({ key, comparable }) => {
+      const type = getDiffType(baseline, comparable);
+      if (!type) {
+        return;
+      }
 
-    if (!baseline.found) {
-      type = 'ADDED';
-    } else if (values.some(({ comparable }) => !comparable.found)) {
-      type = 'REMOVED';
-    } else if (
-      new Set(
-        values.map(({ comparable }) => getJsonType(comparable.value)),
-      ).size > 1
-    ) {
-      type = 'TYPE_CHANGE';
-    } else {
-      type = 'CHANGED';
-    }
-
-    const diff: DiffEntry = { path, type };
-    values.forEach(({ key, comparable }) => {
+      let diff = diffsByType.get(type);
+      if (!diff) {
+        diff = { path, type };
+        if (baseline.found) {
+          diff[values[0].key] = baseline.value;
+        }
+        diffsByType.set(type, diff);
+      }
       if (comparable.found) {
         diff[key] = comparable.value;
       }
     });
-    diffs.push(diff);
 
+    diffs.push(...diffsByType.values());
     return diffs;
   }, []);
+}
+
+function getDiffType(
+  baseline: { found: boolean; value: unknown },
+  target: { found: boolean; value: unknown },
+): DiffEntry['type'] | undefined {
+  if (!baseline.found && !target.found) {
+    return undefined;
+  }
+
+  if (!baseline.found) {
+    return 'ADDED';
+  }
+
+  if (!target.found) {
+    return 'REMOVED';
+  }
+
+  if (isEqual(baseline.value, target.value)) {
+    return undefined;
+  }
+
+  return getJsonType(baseline.value) === getJsonType(target.value)
+    ? 'CHANGED'
+    : 'TYPE_CHANGE';
 }
 
 function getComparableValue(

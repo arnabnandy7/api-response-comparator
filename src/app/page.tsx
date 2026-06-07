@@ -1065,9 +1065,12 @@ function JsonTreeComparison({
   prodJson: unknown;
   highlightedDiffs: DiffEntry[];
 }) {
-  const diffByPath = new Map(
-    highlightedDiffs.map((diff) => [diff.path, diff]),
-  );
+  const diffByPath = highlightedDiffs.reduce((diffsByPath, diff) => {
+    const pathDiffs = diffsByPath.get(diff.path) ?? [];
+    pathDiffs.push(diff);
+    diffsByPath.set(diff.path, pathDiffs);
+    return diffsByPath;
+  }, new Map<string, DiffEntry[]>());
 
   return (
     <div
@@ -1105,7 +1108,7 @@ function JsonTreePanel({
   title: string;
   value: unknown;
   environment: 'Dev' | 'QA' | 'Prod';
-  diffByPath: Map<string, DiffEntry>;
+  diffByPath: Map<string, DiffEntry[]>;
 }) {
   return (
     <section
@@ -1147,10 +1150,10 @@ function JsonTreeNode({
   path: string;
   label: string;
   environment: 'Dev' | 'QA' | 'Prod';
-  diffByPath: Map<string, DiffEntry>;
+  diffByPath: Map<string, DiffEntry[]>;
   depth: number;
 }) {
-  const diff = diffByPath.get(path);
+  const diff = selectTreeDiff(diffByPath.get(path) ?? [], environment);
   const highlightClass = getTreeHighlightClassName(diff, environment);
   const ariaLabel = diff
     ? `${environment} path ${path || '(root)'} ${diff.type}`
@@ -1253,6 +1256,25 @@ function getTreeHighlightClassName(
   return 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-800';
 }
 
+function selectTreeDiff(
+  diffs: DiffEntry[],
+  environment: 'Dev' | 'QA' | 'Prod',
+): DiffEntry | undefined {
+  const relevantDiffs = diffs.filter((diff) =>
+    hasEnvironmentValue(diff, environment),
+  );
+  const priority: Record<DiffEntry['type'], number> = {
+    TYPE_CHANGE: 4,
+    REMOVED: 3,
+    ADDED: 2,
+    CHANGED: 1,
+  };
+
+  return relevantDiffs.sort(
+    (left, right) => priority[right.type] - priority[left.type],
+  )[0];
+}
+
 function hasEnvironmentValue(
   diff: DiffEntry,
   environment: 'Dev' | 'QA' | 'Prod',
@@ -1314,8 +1336,8 @@ function DiffTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-zinc-700">
-          {diffs.map((diff) => (
-            <tr key={`${diff.type}-${diff.path}`}>
+          {diffs.map((diff, index) => (
+            <tr key={`${diff.type}-${diff.path}-${index}`}>
               <td className="px-4 py-3 font-mono text-gray-900 dark:text-gray-100">
                 {diff.path || '(root)'}
               </td>

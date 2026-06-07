@@ -131,7 +131,29 @@ describe('compareJson', () => {
         type: 'TYPE_CHANGE',
         devValue: 101,
         qaValue: '101',
-        prodValue: 101,
+      },
+    ]);
+  });
+
+  it('returns separate rows when one environment changes type and another changes value', () => {
+    expect(
+      compareJson(
+        { amount: 100 },
+        { amount: '100' },
+        { amount: 200 },
+      ),
+    ).toEqual([
+      {
+        path: 'amount',
+        type: 'TYPE_CHANGE',
+        devValue: 100,
+        qaValue: '100',
+      },
+      {
+        path: 'amount',
+        type: 'CHANGED',
+        devValue: 100,
+        prodValue: 200,
       },
     ]);
   });
@@ -148,7 +170,6 @@ describe('compareJson', () => {
         path: 'status',
         type: 'CHANGED',
         devValue: 'ready',
-        qaValue: 'ready',
         prodValue: 'deployed',
       },
     ]);
