@@ -10,13 +10,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v5
@@ -26,5 +31,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage
+          if-no-files-found: error
