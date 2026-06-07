@@ -462,4 +462,52 @@ describe('Home', () => {
     await user.click(screen.getByRole('button', { name: 'Clear Prod' }));
     expect(screen.getByLabelText('Prod')).toHaveValue('');
   });
+
+  it('resets the entire page to its initial state', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await fillEnvironments(user, { value: 1 }, { value: 2 }, { value: 3 });
+    await user.type(screen.getByLabelText('Dev API URL'), 'https://dev.test');
+    await user.type(screen.getByLabelText('QA API URL'), 'https://qa.test');
+    await user.type(screen.getByLabelText('Prod API URL'), 'https://prod.test');
+    await user.type(
+      screen.getByLabelText('Dev cURL'),
+      "curl 'https://dev.example.com'",
+    );
+    await user.type(
+      screen.getByLabelText('QA cURL'),
+      "curl 'https://qa.example.com'",
+    );
+    await user.type(
+      screen.getByLabelText('Prod cURL'),
+      "curl 'https://prod.example.com'",
+    );
+    await user.type(screen.getByLabelText('Ignore fields'), 'requestId');
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.click(screen.getByRole('button', { name: 'Tree' }));
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search differences by path' }),
+      'value',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByLabelText('Dev')).toHaveValue('');
+    expect(screen.getByLabelText('QA')).toHaveValue('');
+    expect(screen.getByLabelText('Prod')).toHaveValue('');
+    expect(screen.getByLabelText('Dev API URL')).toHaveValue('');
+    expect(screen.getByLabelText('QA API URL')).toHaveValue('');
+    expect(screen.getByLabelText('Prod API URL')).toHaveValue('');
+    expect(screen.getByLabelText('Dev cURL')).toHaveValue('');
+    expect(screen.getByLabelText('QA cURL')).toHaveValue('');
+    expect(screen.getByLabelText('Prod cURL')).toHaveValue('');
+    expect(screen.getByLabelText('Ignore fields')).toHaveValue('');
+    expect(screen.queryByRole('heading', { name: 'Results' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compare' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Fetch & Compare' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Import cURL & Compare' }),
+    ).toBeDisabled();
+  });
 });

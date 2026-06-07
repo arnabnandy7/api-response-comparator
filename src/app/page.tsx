@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { compareJson } from '@/src/lib/compare';
 import { parseCurlCommand, type CurlRequest } from '@/src/lib/curl';
 import {
@@ -39,6 +39,8 @@ export default function Home() {
   const [ignoreFields, setIgnoreFields] = useState('');
   const [ignoreSuggestions, setIgnoreSuggestions] = useState<IgnoreSuggestion[]>([]);
   const [toastMessage, setToastMessage] = useState('');
+  const [inputResetKey, setInputResetKey] = useState(0);
+  const requestGeneration = useRef(0);
   const populatedJsonCount = [devJson, qaJson, prodJson].filter((value) =>
     value.trim(),
   ).length;
@@ -65,6 +67,25 @@ export default function Home() {
     setComparedProdJson(undefined);
     setError('');
     setHasCompared(false);
+  };
+
+  const handleResetPage = () => {
+    requestGeneration.current += 1;
+    setDevJson('');
+    setQaJson('');
+    setProdJson('');
+    setDevUrl('');
+    setQaUrl('');
+    setProdUrl('');
+    setDevCurl('');
+    setQaCurl('');
+    setProdCurl('');
+    resetSourceDerivedState();
+    setIsUrlFetching(false);
+    setIsCurlFetching(false);
+    setCopied(false);
+    setToastMessage('');
+    setInputResetKey((key) => key + 1);
   };
 
   const handleCopyDiff = () => {
@@ -386,6 +407,7 @@ export default function Home() {
   };
 
   const handleFetchAndCompare = async () => {
+    const generation = ++requestGeneration.current;
     setError('');
     setIsUrlFetching(true);
     setHasCompared(true);
@@ -399,6 +421,7 @@ export default function Home() {
         fetchAndParseOptionalUrl(qaUrl, 'QA'),
         fetchAndParseOptionalUrl(prodUrl, 'Prod'),
       ]);
+      if (generation !== requestGeneration.current) return;
 
       setDevJson(parsedDev.active ? JSON.stringify(parsedDev.value, null, 2) : '');
       setQaJson(parsedQa.active ? JSON.stringify(parsedQa.value, null, 2) : '');
@@ -416,13 +439,16 @@ export default function Home() {
       );
       showToast('Fetched and compared responses');
     } catch (err: unknown) {
+      if (generation !== requestGeneration.current) return;
       console.error(err);
       setDiffs([]);
       setError(
         err instanceof Error ? err.message : 'Failed to fetch and compare URLs',
       );
     } finally {
-      setIsUrlFetching(false);
+      if (generation === requestGeneration.current) {
+        setIsUrlFetching(false);
+      }
     }
   };
 
@@ -470,6 +496,7 @@ export default function Home() {
   };
 
   const handleCurlImportAndCompare = async () => {
+    const generation = ++requestGeneration.current;
     setError('');
     setIsCurlFetching(true);
     setHasCompared(true);
@@ -483,6 +510,7 @@ export default function Home() {
         fetchAndParseOptionalCurl(qaCurl, 'QA'),
         fetchAndParseOptionalCurl(prodCurl, 'Prod'),
       ]);
+      if (generation !== requestGeneration.current) return;
 
       setDevJson(parsedDev.active ? JSON.stringify(parsedDev.value, null, 2) : '');
       setQaJson(parsedQa.active ? JSON.stringify(parsedQa.value, null, 2) : '');
@@ -500,6 +528,7 @@ export default function Home() {
       );
       showToast('Imported cURL requests and compared responses');
     } catch (curlError: unknown) {
+      if (generation !== requestGeneration.current) return;
       console.error(curlError);
       setDiffs([]);
       setError(
@@ -508,7 +537,9 @@ export default function Home() {
           : 'Failed to import and compare cURL requests',
       );
     } finally {
-      setIsCurlFetching(false);
+      if (generation === requestGeneration.current) {
+        setIsCurlFetching(false);
+      }
     }
   };
 
@@ -592,6 +623,7 @@ export default function Home() {
         {/* Input Section */}
         <div className="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-3">
           <JsonSourceCard
+            key={`dev-${inputResetKey}`}
             environment="Dev"
             id="dev-json"
             value={devJson}
@@ -603,6 +635,7 @@ export default function Home() {
             onFileChange={handleDevFileChange}
           />
           <JsonSourceCard
+            key={`qa-${inputResetKey}`}
             environment="QA"
             id="qa-json"
             value={qaJson}
@@ -614,6 +647,7 @@ export default function Home() {
             onFileChange={handleQaFileChange}
           />
           <JsonSourceCard
+            key={`prod-${inputResetKey}`}
             environment="Prod"
             id="prod-json"
             value={prodJson}
@@ -759,6 +793,13 @@ export default function Home() {
             }
           >
             {isCurlFetching ? 'Importing cURL…' : 'Import cURL & Compare'}
+          </button>
+          <button
+            type="button"
+            onClick={handleResetPage}
+            className="rounded-lg border border-red-300 bg-white px-8 py-3 font-semibold text-red-700 transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-red-800 dark:bg-zinc-800 dark:text-red-300 dark:hover:bg-red-950/40"
+          >
+            Reset
           </button>
         </div>
 
