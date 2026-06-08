@@ -107,6 +107,10 @@ function getDiffType(
     return undefined;
   }
 
+  if (baseline.value === null || target.value === null) {
+    return 'CHANGED';
+  }
+
   return getJsonType(baseline.value) === getJsonType(target.value)
     ? 'CHANGED'
     : 'TYPE_CHANGE';
