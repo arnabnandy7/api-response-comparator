@@ -135,6 +135,30 @@ describe('compareJson', () => {
     ]);
   });
 
+  it('reports null comparisons as value changes instead of type changes', () => {
+    expect(
+      compareJson(
+        { text: null, count: 1 },
+        { text: 'ready', count: null },
+        { text: null, count: 2 },
+      ),
+    ).toEqual([
+      {
+        path: 'count',
+        type: 'CHANGED',
+        devValue: 1,
+        qaValue: null,
+        prodValue: 2,
+      },
+      {
+        path: 'text',
+        type: 'CHANGED',
+        devValue: null,
+        qaValue: 'ready',
+      },
+    ]);
+  });
+
   it('returns separate rows when one environment changes type and another changes value', () => {
     expect(
       compareJson(
