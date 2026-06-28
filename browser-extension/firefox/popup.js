@@ -754,54 +754,112 @@ function renderModeAndView() {
 function renderTable() {
   const visibleDiffs = getVisibleDiffs();
   if (!visibleDiffs.length) {
-    elements.diffTable.innerHTML = `<tr><td colspan="5" class="empty">${state.diffs.length ? 'No matching differences.' : 'No comparison yet.'}</td></tr>`;
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'empty';
+    cell.textContent = state.diffs.length ? 'No matching differences.' : 'No comparison yet.';
+    row.append(cell);
+    elements.diffTable.replaceChildren(row);
     return;
   }
-  elements.diffTable.innerHTML = visibleDiffs
-    .map(
-      (diff) => `
-        <tr>
-          <td>${escapeHtml(diff.path || '(root)')}</td>
-          <td><span class="badge ${diff.type}">${escapeHtml(diff.type)}</span></td>
-          <td>${escapeHtml(formatValue(diff.devValue))}</td>
-          <td>${escapeHtml(formatValue(diff.qaValue))}</td>
-          <td>${escapeHtml(formatValue(diff.prodValue))}</td>
-        </tr>
-      `,
-    )
-    .join('');
+  elements.diffTable.replaceChildren(...visibleDiffs.map(createDiffRow));
+}
+
+function createDiffRow(diff) {
+  const row = document.createElement('tr');
+  const pathCell = document.createElement('td');
+  pathCell.textContent = diff.path || '(root)';
+
+  const typeCell = document.createElement('td');
+  const badge = document.createElement('span');
+  badge.className = `badge ${diff.type}`;
+  badge.textContent = diff.type;
+  typeCell.append(badge);
+
+  row.append(
+    pathCell,
+    createValueCell(diff.devValue),
+    createValueCell(diff.qaValue),
+    createValueCell(diff.prodValue),
+  );
+  row.insertBefore(typeCell, row.children[1]);
+  return row;
+}
+
+function createValueCell(value) {
+  const cell = document.createElement('td');
+  cell.textContent = formatValue(value);
+  return cell;
 }
 
 function renderTrees() {
   ENVIRONMENTS.forEach(({ id }) => {
     const value = state.active[id] ? state.compared[id] : undefined;
-    elements[`${id}Tree`].innerHTML = value === undefined ? '<div class="empty">No active input.</div>' : renderTreeNode(value, id, '', '(root)', true);
+    if (value === undefined) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'No active input.';
+      elements[`${id}Tree`].replaceChildren(empty);
+      return;
+    }
+    elements[`${id}Tree`].replaceChildren(renderTreeNode(value, id, '', '(root)', true));
   });
 }
 
 function renderTreeNode(value, environmentId, path, label, isRoot = false) {
   const diff = selectTreeDiff(path, environmentId);
   const className = diff ? diff.type : '';
+  const node = document.createElement('div');
+  node.className = ['tree-node', isRoot ? 'root' : '', className].filter(Boolean).join(' ');
+
   if (Array.isArray(value)) {
-    const children = value.length
-      ? value.map((item, index) => renderTreeNode(item, environmentId, `${path}[${index}]`, `[${index}]`)).join('')
-      : '<div class="tree-node"><div class="tree-line"><span class="tree-value">[]</span></div></div>';
-    return `<div class="tree-node ${isRoot ? 'root' : ''} ${className}">
-      <div class="tree-line"><span class="tree-key">${escapeHtml(label)}</span><span class="tree-value">Array(${value.length})</span></div>${children}
-    </div>`;
+    node.append(createTreeLine(label, `Array(${value.length})`));
+    if (value.length) {
+      node.append(...value.map((item, index) => renderTreeNode(item, environmentId, `${path}[${index}]`, `[${index}]`)));
+    } else {
+      node.append(createTreeLeaf('[]'));
+    }
+    return node;
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);
-    const children = entries.length
-      ? entries.map(([key, childValue]) => renderTreeNode(childValue, environmentId, path ? `${path}.${key}` : key, key)).join('')
-      : '<div class="tree-node"><div class="tree-line"><span class="tree-value">{}</span></div></div>';
-    return `<div class="tree-node ${isRoot ? 'root' : ''} ${className}">
-      <div class="tree-line"><span class="tree-key">${escapeHtml(label)}</span><span class="tree-value">Object</span></div>${children}
-    </div>`;
+    node.append(createTreeLine(label, 'Object'));
+    if (entries.length) {
+      node.append(...entries.map(([key, childValue]) => renderTreeNode(childValue, environmentId, path ? `${path}.${key}` : key, key)));
+    } else {
+      node.append(createTreeLeaf('{}'));
+    }
+    return node;
   }
-  return `<div class="tree-node ${isRoot ? 'root' : ''} ${className}">
-    <div class="tree-line"><span class="tree-key">${escapeHtml(label)}</span><span class="tree-value">${escapeHtml(formatValue(value))}</span></div>
-  </div>`;
+  node.append(createTreeLine(label, formatValue(value)));
+  return node;
+}
+
+function createTreeLine(label, value) {
+  const line = document.createElement('div');
+  line.className = 'tree-line';
+  const key = document.createElement('span');
+  key.className = 'tree-key';
+  key.textContent = label;
+  const text = document.createElement('span');
+  text.className = 'tree-value';
+  text.textContent = value;
+  line.append(key, text);
+  return line;
+}
+
+function createTreeLeaf(value) {
+  const node = document.createElement('div');
+  node.className = 'tree-node';
+  const line = document.createElement('div');
+  line.className = 'tree-line';
+  const text = document.createElement('span');
+  text.className = 'tree-value';
+  text.textContent = value;
+  line.append(text);
+  node.append(line);
+  return node;
 }
 
 function selectTreeDiff(path, environmentId) {
@@ -811,18 +869,28 @@ function selectTreeDiff(path, environmentId) {
 
 function renderSuggestions() {
   elements.suggestions.classList.toggle('hidden', !state.suggestions.length);
-  elements.suggestions.innerHTML = state.suggestions
-    .map((suggestion) => {
-      const leaf = getIgnoreFieldFromPath(suggestion.path) ?? suggestion.path;
-      return `<div class="suggestion">
-        <div><strong>${escapeHtml(suggestion.path)}</strong><br /><small>${escapeHtml(suggestion.confidence)} · ${suggestion.score} · ${escapeHtml(suggestion.reason)}</small></div>
-        <button class="secondary" type="button" data-add-ignore="${escapeHtml(leaf)}">Ignore</button>
-      </div>`;
-    })
-    .join('');
-  elements.suggestions.querySelectorAll('[data-add-ignore]').forEach((button) => {
-    button.addEventListener('click', () => addIgnoreField(button.dataset.addIgnore));
-  });
+  elements.suggestions.replaceChildren(...state.suggestions.map(createSuggestionRow));
+}
+
+function createSuggestionRow(suggestion) {
+  const leaf = getIgnoreFieldFromPath(suggestion.path) ?? suggestion.path;
+  const row = document.createElement('div');
+  row.className = 'suggestion';
+  const copy = document.createElement('div');
+  const path = document.createElement('strong');
+  path.textContent = suggestion.path;
+  const detail = document.createElement('small');
+  detail.textContent = `${suggestion.confidence} · ${suggestion.score} · ${suggestion.reason}`;
+  copy.append(path, document.createElement('br'), detail);
+
+  const button = document.createElement('button');
+  button.className = 'secondary';
+  button.type = 'button';
+  button.textContent = 'Ignore';
+  button.addEventListener('click', () => addIgnoreField(leaf));
+
+  row.append(copy, button);
+  return row;
 }
 
 function addIgnoreField(field) {
