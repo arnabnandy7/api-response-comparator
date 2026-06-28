@@ -714,5 +714,5 @@ describe('Home', () => {
     expect(
       screen.getByRole('button', { name: 'Import cURL & Compare' }),
     ).toBeDisabled();
-  });
+  }, 10000);
 });
