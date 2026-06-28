@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Response Comparator</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div>
+          <h1>API Response Comparator</h1>
+          <p>Compare Dev, QA, and Prod responses from JSON, URL, or cURL.</p>
+        </div>
+        <div class="header-actions">
+          <button id="themeButton" class="icon-button" type="button" title="Toggle theme" aria-label="Toggle theme">◐</button>
+          <button id="resetButton" class="icon-button" type="button" title="Reset" aria-label="Reset">↻</button>
+        </div>
+      </header>
+
+      <section class="mode-bar" aria-label="Input mode">
+        <button class="mode-button active" type="button" data-mode="json">JSON</button>
+        <button class="mode-button" type="button" data-mode="url">URL</button>
+        <button class="mode-button" type="button" data-mode="curl">cURL</button>
+      </section>
+
+      <section id="jsonMode" class="mode-panel">
+        <div class="env-grid">
+          <article class="env-card">
+            <div class="env-head">
+              <label for="devJson">Dev JSON</label>
+              <div class="mini-actions">
+                <label class="file-button" for="devFile" title="Upload Dev JSON">⇧</label>
+                <button class="mini-button" type="button" data-clear="devJson" title="Clear Dev JSON" aria-label="Clear Dev JSON">×</button>
+              </div>
+            </div>
+            <textarea id="devJson" spellcheck="false" placeholder='{"id": 1}'></textarea>
+            <input id="devFile" class="file-input" type="file" accept=".json,application/json" data-target="devJson" />
+          </article>
+          <article class="env-card">
+            <div class="env-head">
+              <label for="qaJson">QA JSON</label>
+              <div class="mini-actions">
+                <label class="file-button" for="qaFile" title="Upload QA JSON">⇧</label>
+                <button class="mini-button" type="button" data-clear="qaJson" title="Clear QA JSON" aria-label="Clear QA JSON">×</button>
+              </div>
+            </div>
+            <textarea id="qaJson" spellcheck="false" placeholder='{"id": 1}'></textarea>
+            <input id="qaFile" class="file-input" type="file" accept=".json,application/json" data-target="qaJson" />
+          </article>
+          <article class="env-card">
+            <div class="env-head">
+              <label for="prodJson">Prod JSON</label>
+              <div class="mini-actions">
+                <label class="file-button" for="prodFile" title="Upload Prod JSON">⇧</label>
+                <button class="mini-button" type="button" data-clear="prodJson" title="Clear Prod JSON" aria-label="Clear Prod JSON">×</button>
+              </div>
+            </div>
+            <textarea id="prodJson" spellcheck="false" placeholder='{"id": 1}'></textarea>
+            <input id="prodFile" class="file-input" type="file" accept=".json,application/json" data-target="prodJson" />
+          </article>
+        </div>
+        <div class="actions">
+          <button id="formatButton" class="secondary" type="button">Format</button>
+          <button id="compareJsonButton" type="button">Compare</button>
+        </div>
+      </section>
+
+      <section id="urlMode" class="mode-panel hidden">
+        <div class="env-grid">
+          <label class="field">
+            <span>Dev URL</span>
+            <input id="devUrl" type="url" placeholder="https://api.example.com/dev" />
+          </label>
+          <label class="field">
+            <span>QA URL</span>
+            <input id="qaUrl" type="url" placeholder="https://api.example.com/qa" />
+          </label>
+          <label class="field">
+            <span>Prod URL</span>
+            <input id="prodUrl" type="url" placeholder="https://api.example.com/prod" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="fetchButton" type="button">Fetch & Compare</button>
+        </div>
+      </section>
+
+      <section id="curlMode" class="mode-panel hidden">
+        <div class="env-grid">
+          <label class="field">
+            <span>Dev cURL</span>
+            <textarea id="devCurl" spellcheck="false" placeholder="curl 'https://api.example.com/dev' -H 'Accept: application/json'"></textarea>
+          </label>
+          <label class="field">
+            <span>QA cURL</span>
+            <textarea id="qaCurl" spellcheck="false" placeholder="curl 'https://api.example.com/qa'"></textarea>
+          </label>
+          <label class="field">
+            <span>Prod cURL</span>
+            <textarea id="prodCurl" spellcheck="false" placeholder="curl 'https://api.example.com/prod'"></textarea>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="curlButton" type="button">Import cURL & Compare</button>
+        </div>
+      </section>
+
+      <section class="tools">
+        <label class="field compact">
+          <span>Ignore leaf fields</span>
+          <input id="ignoreFields" type="text" placeholder="timestamp, requestId" />
+        </label>
+        <button id="suggestButton" class="secondary tall" type="button">Suggest Ignore Rules</button>
+        <label class="field compact">
+          <span>Search paths</span>
+          <input id="pathSearch" type="search" placeholder="items[0].price" />
+        </label>
+      </section>
+
+      <section id="suggestions" class="suggestions hidden" aria-label="Ignore suggestions"></section>
+      <section id="status" class="status" role="status" aria-live="polite"></section>
+
+      <section class="summary" aria-label="Diff counts">
+        <button class="count active" type="button" data-filter="ALL">All <strong id="countAll">0</strong></button>
+        <button class="count" type="button" data-filter="ADDED">Added <strong id="countAdded">0</strong></button>
+        <button class="count" type="button" data-filter="REMOVED">Removed <strong id="countRemoved">0</strong></button>
+        <button class="count" type="button" data-filter="CHANGED">Changed <strong id="countChanged">0</strong></button>
+        <button class="count" type="button" data-filter="TYPE_CHANGE">Type <strong id="countType">0</strong></button>
+      </section>
+
+      <section class="result-toolbar">
+        <div id="contractAlert" class="contract-alert hidden">Contract change detected</div>
+        <div class="view-tabs" aria-label="Result view">
+          <button class="view-button active" type="button" data-view="table">Table</button>
+          <button class="view-button" type="button" data-view="tree">Tree</button>
+        </div>
+        <button id="copyButton" class="secondary" type="button">Copy</button>
+        <button id="downloadButton" class="secondary" type="button">JSON</button>
+        <button id="excelButton" class="secondary" type="button">Excel</button>
+      </section>
+
+      <section id="tableView" class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Type</th>
+              <th>Dev</th>
+              <th>QA</th>
+              <th>Prod</th>
+            </tr>
+          </thead>
+          <tbody id="diffTable">
+            <tr>
+              <td colspan="5" class="empty">No comparison yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="treeView" class="tree-grid hidden" aria-label="JSON tree comparison">
+        <article class="tree-panel">
+          <h2>Dev</h2>
+          <div id="devTree" class="tree-body"></div>
+        </article>
+        <article class="tree-panel">
+          <h2>QA</h2>
+          <div id="qaTree" class="tree-body"></div>
+        </article>
+        <article class="tree-panel">
+          <h2>Prod</h2>
+          <div id="prodTree" class="tree-body"></div>
+        </article>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
