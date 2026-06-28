@@ -29,12 +29,6 @@ Then:
 4. Open Safari settings and enable the extension.
 5. Archive the app in Xcode for App Store Connect or TestFlight.
 
-## Important Limitations In This Workspace
-
-This Windows workspace can prepare the source package and assets, but it cannot
-create, sign, archive, notarize, or upload the final Safari app bundle. Those
-steps require Xcode on macOS and an Apple Developer account.
-
 ## Source Package
 
 The source can be zipped and moved to a Mac for conversion. Make sure the zip
