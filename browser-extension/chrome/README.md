@@ -3,6 +3,11 @@
 This is the Chrome-first browser extension version of API Response Comparator.
 It is intentionally kept separate from the Next.js app and has no build step.
 
+## Install
+
+Install API Response Comparator from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/api-response-comparator/fklnkeifmldmabcnncchkfnkgdbmjgen).
+
 ## Load Locally
 
 1. Open `chrome://extensions`.
@@ -37,5 +42,3 @@ It is intentionally kept separate from the Next.js app and has no build step.
   filtered before fetch.
 - The Excel export is an Excel-compatible `.xls` table so the extension can stay
   dependency-free and load unpacked without a build step.
-- Firefox, Edge, and other browser variants can be added under sibling folders
-  once the Chrome behavior is settled.
