@@ -3,6 +3,11 @@
 This is the Microsoft Edge extension version of API Response Comparator.
 It is kept separate from the Next.js app and has no build step.
 
+## Install
+
+Install API Response Comparator from
+[Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/api-response-comparator/lagllcliimlaodacbjgliehjnfmffhjb).
+
 ## Load Locally
 
 1. Open `edge://extensions`.

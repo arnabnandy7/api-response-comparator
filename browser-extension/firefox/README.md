@@ -4,14 +4,18 @@ This is the Firefox browser extension version of API Response Comparator.
 It is kept separate from the Next.js app and can be loaded without a build step.
 The manifest is configured for Firefox desktop and Firefox for Android.
 
+## Install
+
+Install API Response Comparator from
+[Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/api-response-comparator/).
+
 ## Load Temporarily
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on...**.
 3. Select `browser-extension/firefox/manifest.json`.
 
-Temporary add-ons are removed when Firefox restarts. For regular distribution,
-package this folder and submit it through Mozilla Add-ons.
+Temporary add-ons are removed when Firefox restarts.
 
 ## Current Scope
 

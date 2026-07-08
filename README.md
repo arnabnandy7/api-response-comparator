@@ -40,6 +40,14 @@ Paste, upload, fetch, or import cURL
 - Accessible labels, controls, result table, and status messages
 - Vitest, React Testing Library, route, utility, and type-contract tests
 
+## Browser Extensions
+
+API Response Comparator is also available as a browser extension:
+
+- [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/api-response-comparator/)
+- [Chrome Web Store](https://chromewebstore.google.com/detail/api-response-comparator/fklnkeifmldmabcnncchkfnkgdbmjgen)
+- [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/api-response-comparator/lagllcliimlaodacbjgliehjnfmffhjb)
+
 ## Tech Stack
 
 - Next.js 16
