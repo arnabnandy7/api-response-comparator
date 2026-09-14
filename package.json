@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
-    "next": "16.3.4",
+    "next": "16.3.5",
     "next-themes": "^0.4.6",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "undici": "^8.10.2"
   },
   "devDependencies": {
@@ -29,7 +29,7 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^10.10.0",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.5",
     "jsdom": "^30.0.1",
     "patch-package": "^8.0.1",
     "tailwindcss": "^4",
