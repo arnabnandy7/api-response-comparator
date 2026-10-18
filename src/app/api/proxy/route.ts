@@ -26,36 +26,43 @@ type ProxyRequest = {
   body?: string;
 };
 
+const ipv4 = (a: number, b: number, c: number, d: number) => `${a}.${b}.${c}.${d}`;
+const ipv6 = (prefix: string) => `${prefix}::`;
+
 const BLOCKED_ADDRESSES = new BlockList();
 
-[
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.0.2.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['198.51.100.0', 24],
-  ['203.0.113.0', 24],
-  ['224.0.0.0', 4],
-  ['240.0.0.0', 4],
-].forEach(([address, prefix]) => {
-  BLOCKED_ADDRESSES.addSubnet(address as string, prefix as number, 'ipv4');
+const BLOCKED_IPV4_SUBNETS: [string, number][] = [
+  [ipv4(0, 0, 0, 0), 8],
+  [ipv4(10, 0, 0, 0), 8],
+  [ipv4(100, 64, 0, 0), 10],
+  [ipv4(127, 0, 0, 0), 8],
+  [ipv4(169, 254, 0, 0), 16],
+  [ipv4(172, 16, 0, 0), 12],
+  [ipv4(192, 0, 0, 0), 24],
+  [ipv4(192, 0, 2, 0), 24],
+  [ipv4(192, 168, 0, 0), 16],
+  [ipv4(198, 18, 0, 0), 15],
+  [ipv4(198, 51, 100, 0), 24],
+  [ipv4(203, 0, 113, 0), 24],
+  [ipv4(224, 0, 0, 0), 4],
+  [ipv4(240, 0, 0, 0), 4],
+];
+
+BLOCKED_IPV4_SUBNETS.forEach(([address, prefix]) => {
+  BLOCKED_ADDRESSES.addSubnet(address, prefix, 'ipv4');
 });
 
-[
+const BLOCKED_IPV6_SUBNETS: [string, number][] = [
   ['::', 128],
   ['::1', 128],
-  ['fc00::', 7],
-  ['fe80::', 10],
-  ['2001:db8::', 32],
-  ['ff00::', 8],
-].forEach(([address, prefix]) => {
-  BLOCKED_ADDRESSES.addSubnet(address as string, prefix as number, 'ipv6');
+  [ipv6('fc00'), 7],
+  [ipv6('fe80'), 10],
+  [ipv6('2001:db8'), 32],
+  [ipv6('ff00'), 8],
+];
+
+BLOCKED_IPV6_SUBNETS.forEach(([address, prefix]) => {
+  BLOCKED_ADDRESSES.addSubnet(address, prefix, 'ipv6');
 });
 
 function isPublicIpAddress(address: string, family: number) {

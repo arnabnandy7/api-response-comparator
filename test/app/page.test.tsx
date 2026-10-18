@@ -258,6 +258,31 @@ describe('Home', () => {
     expect(screen.getByRole('button', { name: 'Copy Diff' })).toBeInTheDocument();
   });
 
+  it('logs an error when Excel export workbook generation fails', async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(ExcelJS.Workbook).mockImplementationOnce(function () {
+      return {
+        addWorksheet: vi.fn(() => ({
+          addRow: vi.fn(() => ({ height: 0, eachCell: vi.fn() })),
+          columns: [],
+        })),
+        xlsx: { writeBuffer: vi.fn().mockRejectedValue(new Error('Export failed')) },
+      } as unknown as ExcelJS.Workbook;
+    });
+
+    render(<Home />);
+
+    await fillEnvironments(user, { value: 1 }, { value: 2 }, { value: 3 });
+    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.click(screen.getByRole('button', { name: 'Download Excel' }));
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to generate Excel workbook:',
+      expect.any(Error),
+    );
+  });
+
   it('fetches and compares three API URLs', async () => {
     const user = userEvent.setup();
     const responses = new Map([
