@@ -170,10 +170,15 @@ export default function Home() {
     }
 
     // write workbook to buffer and trigger download
-    workbook.xlsx.writeBuffer().then((buffer) => {
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      downloadBlob(blob, fileName);
-    });
+    void workbook.xlsx
+      .writeBuffer()
+      .then((buffer) => {
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        downloadBlob(blob, fileName);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to generate Excel workbook:', error);
+      });
   };
 
   const handleDownloadExcel = () => {
