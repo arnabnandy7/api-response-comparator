@@ -134,6 +134,34 @@ function createPublicNetworkAgent() {
   });
 }
 
+class ResponseTooLargeError extends Error {}
+
+async function readResponseBody(response: Awaited<ReturnType<typeof undiciFetch>>) {
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_RESPONSE_SIZE) {
+        await reader.cancel();
+        throw new ResponseTooLargeError('Response too large');
+      }
+
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function fetchPublicJson(
   target: URL,
   signal: AbortSignal,
@@ -164,7 +192,7 @@ async function fetchPublicJson(
 
       if (response.status < 300 || response.status >= 400) {
         return {
-          body: await response.text(),
+          body: await readResponseBody(response),
           ok: response.ok,
           status: response.status,
           statusText: response.statusText,
@@ -215,10 +243,6 @@ async function proxyRequest(proxyRequest: ProxyRequest) {
   try {
     const response = await fetchPublicJson(target, controller.signal, proxyRequest);
 
-    if (response.body.length > MAX_RESPONSE_SIZE) {
-      return NextResponse.json({ error: 'Response too large' }, { status: 413 });
-    }
-
     if (!response.ok) {
       return NextResponse.json(
         {
@@ -237,6 +261,10 @@ async function proxyRequest(proxyRequest: ProxyRequest) {
       },
     });
   } catch (error: unknown) {
+    if (error instanceof ResponseTooLargeError) {
+      return NextResponse.json({ error: 'Response too large' }, { status: 413 });
+    }
+
     if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json({ error: 'Request timeout' }, { status: 504 });
     }

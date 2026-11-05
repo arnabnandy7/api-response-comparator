@@ -67,6 +67,82 @@ describe('GET /api/proxy', () => {
     );
   });
 
+  it('decodes UTF-8 characters split across response chunks', async () => {
+    const bytes = new TextEncoder().encode('{"message":"€😀"}');
+    let offset = 0;
+    mockFetch.mockResolvedValueOnce(new Response(new ReadableStream({
+      pull(controller) {
+        if (offset === bytes.length) {
+          controller.close();
+        } else {
+          controller.enqueue(bytes.subarray(offset, ++offset));
+        }
+      },
+    })));
+
+    const response = await GET(new Request('http://localhost/api/proxy?url=https://api.example.com/data'));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"message":"€😀"}');
+  });
+
+  it('accepts a response exactly at the 50 MB limit', async () => {
+    const chunk = new Uint8Array(1024 * 1024).fill(120);
+    let chunksRead = 0;
+    mockFetch.mockResolvedValueOnce(new Response(new ReadableStream({
+      pull(controller) {
+        if (chunksRead++ === 50) controller.close();
+        else controller.enqueue(chunk);
+      },
+    })));
+
+    const response = await GET(new Request('http://localhost/api/proxy?url=https://api.example.com/data'));
+
+    expect(response.status).toBe(200);
+    expect((await response.text()).length).toBe(50 * 1024 * 1024);
+  });
+
+  it.each([200, 503])('cancels an oversized %i response by bytes before reading the rest', async (status) => {
+    // Each chunk has 1 MB of characters but 2 MB of UTF-8 bytes.
+    const chunk = new TextEncoder().encode('é'.repeat(1024 * 1024));
+    const cancel = vi.fn();
+    let chunksRead = 0;
+    const upstream = new Response(new ReadableStream({
+      pull(controller) {
+        chunksRead += 1;
+        controller.enqueue(chunk);
+      },
+      cancel,
+    }, { highWaterMark: 0 }), {
+      status,
+      // The limit must work even when Content-Length is inaccurate.
+      headers: { 'content-length': '1' },
+    });
+    mockFetch.mockResolvedValueOnce(upstream);
+
+    const response = await POST(new Request('http://localhost/api/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://api.example.com/data' }),
+    }));
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: 'Response too large' });
+    expect(chunksRead).toBe(26);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(upstream.body?.locked).toBe(false);
+    expect(mockAgentClose).toHaveBeenCalledOnce();
+  });
+
+  it('handles an empty upstream body', async () => {
+    mockFetch.mockResolvedValueOnce(new Response(null));
+
+    const response = await GET(new Request('http://localhost/api/proxy?url=https://api.example.com/data'));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('');
+  });
+
   it('returns 400 for direct IP addresses', async () => {
     const request = new Request('http://localhost/api/proxy?url=https://93.184.216.34/data');
     const response = await GET(request);
