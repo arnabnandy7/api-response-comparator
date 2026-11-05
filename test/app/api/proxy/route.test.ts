@@ -86,6 +86,20 @@ describe('GET /api/proxy', () => {
     expect(await response.text()).toBe('{"message":"€😀"}');
   });
 
+  it('stops after five redirects and closes every connection agent', async () => {
+    mockFetch.mockImplementation(async () => new Response(null, {
+      status: 302,
+      headers: { location: 'https://api.example.com/next' },
+    }));
+
+    const response = await GET(new Request('http://localhost/api/proxy?url=https://api.example.com/data'));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'Unable to fetch URL: Too many redirects' });
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(mockAgentClose).toHaveBeenCalledTimes(6);
+  });
+
   it('accepts a response exactly at the 50 MB limit', async () => {
     const chunk = new Uint8Array(1024 * 1024).fill(120);
     let chunksRead = 0;
@@ -99,7 +113,7 @@ describe('GET /api/proxy', () => {
     const response = await GET(new Request('http://localhost/api/proxy?url=https://api.example.com/data'));
 
     expect(response.status).toBe(200);
-    expect((await response.text()).length).toBe(50 * 1024 * 1024);
+    expect(await response.text()).toHaveLength(50 * 1024 * 1024);
   });
 
   it.each([200, 503])('cancels an oversized %i response by bytes before reading the rest', async (status) => {

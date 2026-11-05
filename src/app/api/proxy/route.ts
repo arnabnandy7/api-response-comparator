@@ -139,27 +139,21 @@ class ResponseTooLargeError extends Error {}
 async function readResponseBody(response: Awaited<ReturnType<typeof undiciFetch>>) {
   if (!response.body) return '';
 
-  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let bytesRead = 0;
   let text = '';
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return text + decoder.decode();
-
-      bytesRead += value.byteLength;
-      if (bytesRead > MAX_RESPONSE_SIZE) {
-        await reader.cancel();
-        throw new ResponseTooLargeError('Response too large');
-      }
-
-      text += decoder.decode(value, { stream: true });
+  // Async iteration cancels and releases the stream when the size check throws.
+  for await (const chunk of response.body) {
+    bytesRead += chunk.byteLength;
+    if (bytesRead > MAX_RESPONSE_SIZE) {
+      throw new ResponseTooLargeError('Response too large');
     }
-  } finally {
-    reader.releaseLock();
+
+    text += decoder.decode(chunk, { stream: true });
   }
+
+  return text + decoder.decode();
 }
 
 async function fetchPublicJson(
@@ -167,14 +161,21 @@ async function fetchPublicJson(
   signal: AbortSignal,
   request: Omit<ProxyRequest, 'url'> = {},
 ) {
-  let currentTarget = target;
   const method = (request.method ?? 'GET').toUpperCase();
   const requestHeaders = sanitizeRequestHeaders(request.headers);
 
-  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+  return fetchTarget(target, 0);
+
+  async function fetchTarget(currentTarget: URL, redirectCount: number): Promise<{
+    body: string;
+    ok: boolean;
+    status: number;
+    statusText: string;
+  }> {
     validateTarget(currentTarget);
 
     const agent = createPublicNetworkAgent();
+    let nextTarget: URL;
     try {
       const response = await undiciFetch(currentTarget, {
         dispatcher: agent,
@@ -210,18 +211,17 @@ async function fetchPublicJson(
         throw new Error('Too many redirects');
       }
 
-      const nextTarget = new URL(location, currentTarget);
+      nextTarget = new URL(location, currentTarget);
       if (nextTarget.origin !== currentTarget.origin) {
         delete requestHeaders.authorization;
         delete requestHeaders.cookie;
       }
-      currentTarget = nextTarget;
     } finally {
       await agent.close();
     }
-  }
 
-  throw new Error('Too many redirects');
+    return fetchTarget(nextTarget, redirectCount + 1);
+  }
 }
 
 async function proxyRequest(proxyRequest: ProxyRequest) {
