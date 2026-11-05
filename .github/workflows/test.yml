@@ -34,6 +34,12 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@v7
         if: ${{ env.SONAR_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}

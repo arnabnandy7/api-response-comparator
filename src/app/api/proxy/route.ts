@@ -134,19 +134,48 @@ function createPublicNetworkAgent() {
   });
 }
 
+class ResponseTooLargeError extends Error {}
+
+async function readResponseBody(response: Awaited<ReturnType<typeof undiciFetch>>) {
+  if (!response.body) return '';
+
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
+
+  // Async iteration cancels and releases the stream when the size check throws.
+  for await (const chunk of response.body) {
+    bytesRead += chunk.byteLength;
+    if (bytesRead > MAX_RESPONSE_SIZE) {
+      throw new ResponseTooLargeError('Response too large');
+    }
+
+    text += decoder.decode(chunk, { stream: true });
+  }
+
+  return text + decoder.decode();
+}
+
 async function fetchPublicJson(
   target: URL,
   signal: AbortSignal,
   request: Omit<ProxyRequest, 'url'> = {},
 ) {
-  let currentTarget = target;
   const method = (request.method ?? 'GET').toUpperCase();
   const requestHeaders = sanitizeRequestHeaders(request.headers);
 
-  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+  return fetchTarget(target, 0);
+
+  async function fetchTarget(currentTarget: URL, redirectCount: number): Promise<{
+    body: string;
+    ok: boolean;
+    status: number;
+    statusText: string;
+  }> {
     validateTarget(currentTarget);
 
     const agent = createPublicNetworkAgent();
+    let nextTarget: URL;
     try {
       const response = await undiciFetch(currentTarget, {
         dispatcher: agent,
@@ -164,7 +193,7 @@ async function fetchPublicJson(
 
       if (response.status < 300 || response.status >= 400) {
         return {
-          body: await response.text(),
+          body: await readResponseBody(response),
           ok: response.ok,
           status: response.status,
           statusText: response.statusText,
@@ -182,18 +211,17 @@ async function fetchPublicJson(
         throw new Error('Too many redirects');
       }
 
-      const nextTarget = new URL(location, currentTarget);
+      nextTarget = new URL(location, currentTarget);
       if (nextTarget.origin !== currentTarget.origin) {
         delete requestHeaders.authorization;
         delete requestHeaders.cookie;
       }
-      currentTarget = nextTarget;
     } finally {
       await agent.close();
     }
-  }
 
-  throw new Error('Too many redirects');
+    return fetchTarget(nextTarget, redirectCount + 1);
+  }
 }
 
 async function proxyRequest(proxyRequest: ProxyRequest) {
@@ -215,10 +243,6 @@ async function proxyRequest(proxyRequest: ProxyRequest) {
   try {
     const response = await fetchPublicJson(target, controller.signal, proxyRequest);
 
-    if (response.body.length > MAX_RESPONSE_SIZE) {
-      return NextResponse.json({ error: 'Response too large' }, { status: 413 });
-    }
-
     if (!response.ok) {
       return NextResponse.json(
         {
@@ -237,6 +261,10 @@ async function proxyRequest(proxyRequest: ProxyRequest) {
       },
     });
   } catch (error: unknown) {
+    if (error instanceof ResponseTooLargeError) {
+      return NextResponse.json({ error: 'Response too large' }, { status: 413 });
+    }
+
     if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json({ error: 'Request timeout' }, { status: 504 });
     }

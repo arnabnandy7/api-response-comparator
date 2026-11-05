@@ -209,7 +209,8 @@ The proxy:
 - follows at most five redirects
 - allows only common API methods
 - strips unsafe hop-by-hop request headers
-- limits request bodies to 1 MB and responses to 50 MB
+- limits request bodies to 1 MB and counts streamed response bytes, cancelling
+  responses as soon as they exceed 50 MB
 - applies a 30-second timeout
 - returns actionable upstream status and network error details
 

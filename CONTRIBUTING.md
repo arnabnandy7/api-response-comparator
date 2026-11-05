@@ -133,6 +133,11 @@ types for the same path must remain separate rows.
 overrides. Do not remove them unless dependency updates make them unnecessary and
 the audit, tests, lint, and build remain clean.
 
+Keep TypeScript and ESLint within the versions supported by `eslint-config-next`
+and its plugins. The current lint stack requires TypeScript below 6.1 and ESLint 9.
+The minimatch override targets versions 7 and newer so the patched older copies
+used by Excel exports remain unchanged.
+
 ## Pull Request Checklist
 
 - Tests added or updated
